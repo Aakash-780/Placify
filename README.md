@@ -1,318 +1,407 @@
 # 🎓 Placify — AI-Powered Campus Placement Platform
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Deployed-InsForge%20Hosting-6E44FF?style=for-the-badge&logo=vercel&logoColor=white" alt="Deployed Status">
-  <img src="https://img.shields.io/badge/Build-Passing-2EA44F?style=for-the-badge&logo=github-actions&logoColor=white" alt="Build Status">
-  <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&logo=open-source-initiative&logoColor=white" alt="License">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react" />
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
+  <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" />
+  <img src="https://img.shields.io/badge/AI-Gemini%20%7C%20Claude-purple?style=for-the-badge" />
 </p>
 
 <p align="center">
-  <b>Placify</b> is a full-stack, enterprise-grade campus placement management platform. It bridges the gap between <b>Students</b> seeking jobs, <b>Recruiters</b> seeking top talent through natural language AI search, and <b>Placement Administrators</b> coordinating drives.
+An AI-powered multi-organization campus placement platform that connects students, recruiters, placement cells, and universities through one unified ecosystem.
 </p>
 
 ---
 
-## 📌 Table of Contents
+# 📖 About Placify
 
-* [📖 Project Overview](#-project-overview)
-* [🛠️ Tech Stack & Badges](#%EF%B8%8F-tech-stack--badges)
-* [✨ Core Features](#-core-features)
-  * [🔐 Role-Based Access Control](#-role-based-access-control)
-  * [🤖 AI Student Explorer & ATS Resume Analysis](#-ai-student-explorer--ats-resume-analysis)
-  * [💻 Monaco Code Simulator](#-monaco-code-simulator)
-  * [📚 LeetCode DSA Sheets](#-leetcode-dsa-sheets)
-* [🏗️ System Architecture](#%EF%B8%8F-system-architecture)
-* [📁 Folder Structure](#-folder-structure)
-* [🗄️ Database Schema Design](#%EF%B8%8F-database-schema-design)
-* [🚀 Getting Started](#-getting-started)
-* [⚙️ Environment Variables](#%EF%B8%8F-environment-variables)
-* [🌐 Deployment](#-deployment)
-* [🐍 Trendy GitHub Profile Highlights (Bonus)](#-trendy-github-profile-highlights-bonus)
-* [📄 License](#-license)
+Placify is a modern Placement Management Platform built to simplify the entire campus recruitment process.
+
+Instead of using spreadsheets, emails, and multiple disconnected systems, Placify provides one centralized platform where every stakeholder has a dedicated dashboard and workflow.
+
+Whether it's a university managing thousands of students or a recruiter hiring top talent, Placify automates the complete placement lifecycle.
 
 ---
 
-## 📖 Project Overview
+# 🌍 Who Uses Placify?
 
-Campus placements are traditionally managed through fragmented spreadsheets, email threads, and manual resume collections. **Placify** unifies this workflow by providing a PostgreSQL-backed BaaS system paired with natural-language AI filters. Recruiters can search for candidates using plain English queries, parse resumes with AI to auto-tag skills, and manage applications in real time.
+Placify supports multiple organizations under a single platform.
 
----
-
-## 🛠️ Tech Stack & Badges
-
-Placify is built using modern, fast, and light-weight libraries:
-
-| Layer | Technologies & Badges |
-|---|---|
-| **Core Framework** | ![React 19](https://img.shields.io/badge/React%2019-20232A?style=flat-square&logo=react&logoColor=61DAFB) ![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white) |
-| **Build & Tooling** | ![Vite 6](https://img.shields.io/badge/Vite%206-646CFF?style=flat-square&logo=vite&logoColor=white) ![ESLint](https://img.shields.io/badge/ESLint-4B32C3?style=flat-square&logo=eslint&logoColor=white) ![Prettier](https://img.shields.io/badge/Prettier-F7B93E?style=flat-square&logo=prettier&logoColor=black) |
-| **Styling** | ![Tailwind CSS v3](https://img.shields.io/badge/Tailwind%20CSS%20v3-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white) ![Radix UI](https://img.shields.io/badge/Radix%20UI-121212?style=flat-square&logo=radix-ui&logoColor=white) |
-| **Backend (BaaS)** | ![InsForge](https://img.shields.io/badge/InsForge-FF4500?style=flat-square&logo=postgresql&logoColor=white) (Postgres, Auth, Storage) |
-| **Artificial Intelligence** | ![Google Gemini](https://img.shields.io/badge/Google%20Gemini-8E75C2?style=flat-square&logo=google-gemini&logoColor=white) ![Claude AI](https://img.shields.io/badge/Claude%203.5-D97706?style=flat-square&logo=anthropic&logoColor=white) |
-| **Libraries** | ![Recharts](https://img.shields.io/badge/Recharts-22B5BF?style=flat-square) ![Lucide React](https://img.shields.io/badge/Lucide%20React-F43F5E?style=flat-square) |
-
----
-
-## ✨ Core Features
-
-### 🔐 Role-Based Access Control
-
-The application implements a secure three-tier RBAC system:
-
-```mermaid
-graph TD
-    A[User Login / Registration] --> B{Choose Role}
-    B -->|Student| C[Student Dashboard]
-    B -->|Recruiter| D[Recruiter Dashboard]
-    B -->|Admin| E[Admin Center]
 ```
 
-*   **Student portal**: Dashboard analytics, live placement drives, interactive resume builder, Monaco code simulator, alumni database, off-campus drive locator.
-*   **Recruiter portal**: Create and post job listings, check applicant requirements, search candidate pool using natural language query explorer.
-*   **Admin panel**: Track overall campus statistics (placed vs unplaced, branch-wise percentages, top recruiters), verify students, audit system activity logs.
+Platform Owner (Placify)
+│
+├── Organization A
+│ ├── Admin
+│ ├── Sub Admins
+│ ├── Students
+│ └── Recruiters
+│
+├── Organization B
+│ ├── Admin
+│ ├── Students
+│ └── Recruiters
+│
+└── Organization C
+├── Admin
+├── Students
+└── Recruiters
+
+```
+
+Each organization has its own independent users, placement drives, recruiters, and analytics.
 
 ---
 
-### 🤖 AI Student Explorer & ATS Resume Analysis
+# 👥 User Roles
 
-Placify integrates Gemini and Claude AI models directly into the search console:
+## 👑 Platform Owner
 
-*   **Natural Language Filters**: Recruiters search by typing queries like `"Find CSE students with CGPA above 8.5 who know React"` or `"Show me 2026 batch candidates skilled in Python"`. The AI parses the request into SQL-compliant database filters.
-*   **Fallback Regex NLP Parser**: If the API key is not configured, the local regular expression engine extracts CGPA ranges, branch patterns, and over 50+ technology keywords seamlessly.
-*   **ATS Metadata Parser**: Evaluates candidate resumes (PDF/Word), extracts summarized bullet points, auto-generates category tags, and rates experience level.
+The Platform Owner manages the complete Placify ecosystem.
 
----
+### Responsibilities
 
-### 💻 Monaco Code Simulator
-
-An integrated coding playground powered by the Monaco Editor engine (VS Code source core):
-*   Real-time syntax highlighting for C++, Java, Python, and JavaScript.
-*   In-browser output simulator.
-*   Pre-loaded interview questions with direct code evaluation.
-
----
-
-### 📚 LeetCode DSA Sheets
-
-A preparation module displaying two curated tracks:
-1.  **LeetCode 75**: Essential algorithmic pattern exercises.
-2.  **Top Interview 150**: The most frequently asked placements questions.
-*   **Features**: Difficulty filtering, active checkmark progress tracking, direct links to code files, and target company tags.
+- Create Organizations
+- Generate Organization Admin Accounts
+- Manage Subscriptions
+- Monitor Platform Analytics
+- View All Organizations
+- Manage Platform Settings
+- Track Students & Recruiters
 
 ---
 
-## 🏗️ System Architecture
+## 🏫 Organization Admin
 
-Placify uses a client-heavy Single Page Application (SPA) architecture combined with a serverless PostgreSQL Backend-as-a-Service layer:
+Every organization receives its own Admin Dashboard.
 
-```mermaid
-flowchart LR
-    subgraph Frontend [Vite SPA Client]
-        UI[React 19 Components]
-        Context[Role/Theme State]
-        Routes[React Router v7]
-    end
+### Responsibilities
 
-    subgraph BaaS [InsForge BaaS Platform]
-        PostgREST[PostgREST REST API]
-        Auth[JWT Role Auth]
-        DB[(PostgreSQL Database)]
-        Storage[S3 Document Storage]
-    end
+- Verify Students
+- Approve Recruiters
+- Manage Sub Admins
+- Create Placement Drives
+- View Placement Statistics
+- Manage Departments
+- View Applications
+- Track Company Visits
 
-    subgraph AIServers [AI Inference APIs]
-        Gemini[Google Gemini API]
-        Claude[Claude Haiku AI]
-    end
+---
 
-    UI -->|JWT Requests| PostgREST
-    UI -->|Credentials| Auth
-    UI -->|Resume Uploads| Storage
-    PostgREST --> DB
-    UI -->|Resume Analysis / NLP| AIServers
+## 🧑‍💼 Sub Admin
+
+Sub Admins assist Organization Admins.
+
+### Responsibilities
+
+- Student Verification
+- Recruiter Verification
+- Placement Drive Support
+- Profile Approval
+- Data Management
+
+---
+
+## 🎓 Student
+
+Students receive a personalized dashboard.
+
+### Features
+
+- Resume Builder
+- ATS Resume Score
+- AI Resume Analysis
+- Apply for Jobs
+- Track Applications
+- Coding Platform
+- DSA Practice
+- Community Forum
+- Placement Analytics
+- Skill Tracking
+
+---
+
+## 🏢 Recruiter
+
+Recruiters can efficiently hire candidates.
+
+### Features
+
+- Company Dashboard
+- Post Jobs
+- Manage Applicants
+- AI Candidate Search
+- ATS Resume Analysis
+- Shortlist Candidates
+- Interview Management
+- Hiring Analytics
+
+---
+
+# ✨ Core Features
+
+## 🔐 Multi-Tenant Architecture
+
+Supports multiple universities and organizations from one platform.
+
+---
+
+## 🤖 AI Candidate Explorer
+
+Recruiters can search candidates using natural language.
+
+Example
+
+```
+
+Find AI/ML students graduating in 2027
+with React and Python
+CGPA above 8.5
+
+```
+
+Placify converts this into intelligent database queries automatically.
+
+---
+
+## 📄 ATS Resume Analyzer
+
+Automatically
+
+- Extract Skills
+- Calculate ATS Score
+- Generate Resume Summary
+- Detect Missing Keywords
+- Recommend Improvements
+
+---
+
+## 💻 Monaco Code Simulator
+
+Built-in coding environment with
+
+- C++
+- Java
+- Python
+- JavaScript
+
+Features
+
+- Run Code
+- Syntax Highlighting
+- Interview Questions
+- Progress Tracking
+
+---
+
+## 📚 DSA Preparation
+
+Includes
+
+- LeetCode 75
+- Top Interview 150
+- Company-wise Questions
+- Progress Tracking
+- Notes
+- Difficulty Filters
+
+---
+
+## 💬 Community Forum
+
+Students can
+
+- Ask Questions
+- Share Resources
+- Discuss Interview Experiences
+- Connect with Seniors
+
+---
+
+# 📊 Dashboards
+
+## Platform Owner Dashboard
+
+- Organizations
+- Students
+- Recruiters
+- Active Drives
+- Platform Analytics
+
+---
+
+## Organization Dashboard
+
+- Placement Statistics
+- Company Visits
+- Branch-wise Placements
+- Student Verification
+
+---
+
+## Student Dashboard
+
+- Applications
+- Resume Score
+- Coding Progress
+- Skills
+- Placement Status
+
+---
+
+## Recruiter Dashboard
+
+- Posted Jobs
+- Applicants
+- Shortlisted Candidates
+- Hiring Pipeline
+
+---
+
+# 🛠 Tech Stack
+
+### Frontend
+
+- React 19
+- TypeScript
+- Vite
+- Tailwind CSS
+- Radix UI
+
+### Backend
+
+- InsForge
+- PostgreSQL
+- Authentication
+- Storage
+
+### AI
+
+- Google Gemini
+- Claude AI
+- Grok AI
+
+### Libraries
+
+- Monaco Editor
+- Recharts
+- Lucide React
+
+---
+
+# 🏗 Architecture
+
+```
+
+Platform Owner
+│
+├── Organization
+│
+├── Admin
+│
+├── Sub Admin
+│
+├── Students
+│
+├── Recruiters
+│
+└── AI Engine
+├── Resume Parser
+├── ATS Analyzer
+└── Candidate Search
+
 ```
 
 ---
 
-## 📁 Folder Structure
-
-The repository is structured following strict clean architecture practices:
+# 📂 Project Structure
 
 ```
+
 placify/
-├── docs/                     # Project documentation & reference sheets
-├── database/                 # Database schema migrations & SQL scripts
-├── public/                   # Static public assets
+│
 ├── src/
-│   ├── assets/               # Local images and svg icons
-│   ├── components/           # Reusable UI component modules
-│   ├── constants/            # Shared static configurations
-│   ├── context/              # Global React Contexts
-│   ├── layouts/              # Multi-layout shells
-│   ├── lib/                  # Third-party wrapper integrations
-│   ├── modules/              # Feature modules grouped by user role
-│   ├── pages/                # High-level route pages
-│   ├── routes/               # Routing declarations
-│   ├── styles/               # CSS and styles
-│   ├── utils/                # Functional utility helpers
-│   ├── App.tsx               # Main application container
-│   └── main.tsx              # Application entrypoint
-├── .env.example              # Template for environment variables
-├── .editorconfig             # Editor configuration preferences
-├── .prettierrc               # Formatting settings
-├── LICENSE                   # MIT License
-├── package.json
-├── tailwind.config.js
-└── vite.config.ts
+│ ├── components/
+│ ├── modules/
+│ ├── pages/
+│ ├── routes/
+│ ├── services/
+│ ├── layouts/
+│ └── utils/
+│
+├── database/
+├── docs/
+├── public/
+└── package.json
+
 ```
 
 ---
 
-## 🗄️ Database Schema Design
+# 🚀 Installation
 
-Placify's backend runs on 9 structured PostgreSQL tables:
+```bash
+git clone https://github.com/Aakash-780/Placify.git
 
-```
-+------------------+       +------------------+       +-------------------+
-|     students     |       |       jobs       |       |   applications    |
-+------------------+       +------------------+       +-------------------+
-| id (UUID, PK)    |       | id (UUID, PK)    |       | id (UUID, PK)     |
-| name (TEXT)      |       | title (TEXT)     |       | student_id (FK)   |
-| cgpa (NUMERIC)   |       | company (TEXT)   |       | job_id (FK)       |
-| branch (TEXT)    |       | ctc (NUMERIC)    |       | status (TEXT)     |
-| resume_url (TEXT)|       | location (TEXT)  |       | applied_at (DATE) |
-+------------------+       +------------------+       +-------------------+
+cd Placify
+
+npm install
+
+npm run dev
 ```
 
-### Table Definitions
+Production
 
-1.  **`students`**: Personal profile, CGPA, graduation batch, skills list, and resume storage links.
-2.  **`recruiters`**: Company info, designation, contact numbers.
-3.  **`admins`**: Administrator tracking metadata.
-4.  **`jobs`**: Location, role descriptions, CTC value, and branch eligibility keys.
-5.  **`applications`**: Application states (`Applied`, `Shortlisted`, `Offered`, `Rejected`).
-6.  **`forum_threads`**: Community topics with title, author, category, and upvote counts.
-7.  **`student_ai_profiles`**: AI analyzed tags, extracted resume text summary, and parsed technology keywords.
-8.  **`dsa_questions`**: LeetCode problem links, difficulties, and categorization.
-9.  **`dsa_companies`**: Placement tags linking target companies to target questions.
+```bash
+npm run build
+npm run preview
+```
 
 ---
 
-## 🚀 Getting Started
-
-### Prerequisites
-*   Node.js 18+
-*   npm or yarn
-
-### Local Setup Instructions
-
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/Aakash-780/Placify.git
-    cd Placify
-    ```
-
-2.  **Install dependencies**:
-    ```bash
-    npm install
-    ```
-
-3.  **Set up environment variables**:
-    ```bash
-    cp .env.example .env
-    # Edit the file with your credentials
-    ```
-
-4.  **Launch the development server**:
-    ```bash
-    npm run dev
-    ```
-
-5.  **Build production artifacts**:
-    ```bash
-    npm run build
-    npm run preview
-    ```
-
----
-
-## ⚙️ Environment Variables
-
-Create a `.env` file in the root folder with the following variables:
+# 🔑 Environment Variables
 
 ```env
-# InsForge Database & API Keys
-VITE_INSFORGE_BASE_URL=https://39s3r2sh.ap-southeast.insforge.app
-VITE_INSFORGE_ANON_KEY=your_insforge_anonymous_key
+VITE_INSFORGE_BASE_URL=
 
-# Google Gemini API key (Used for Resume Metadata Parsing)
-VITE_GEMINI_API_KEY=your_gemini_api_key
+VITE_INSFORGE_ANON_KEY=
 
-# Grok (xAI) API key (AI Fallback Backup)
-VITE_GROK_API_KEY=your_grok_api_key
+VITE_GEMINI_API_KEY=
 
-# CloudConvert API keys (Used for PDF/Word resume conversions)
-VITE_CONVERT_API_SECRET=your_convert_api_secret
-VITE_CLOUDCONVERT_API_KEY=your_cloudconvert_api_key
+VITE_GROK_API_KEY=
+
+VITE_CLOUDCONVERT_API_KEY=
 ```
 
 ---
 
-## 🌐 Deployment
+# 📈 Future Scope
 
-The frontend of Placify is compiled to a static Single Page Application and hosted on Vercel.
-
-To push new deployments:
-```bash
-# Verify the build compiles correctly
-npm run build
-
-# Deploy to InsForge hosting environment
-npx @insforge/cli deployments deploy . --env '{"VITE_INSFORGE_BASE_URL":"https://39s3r2sh.ap-southeast.insforge.app"}'
-```
+- AI Mock Interviews
+- Video Interview Platform
+- Company Assessment Portal
+- Interview Scheduling
+- Email Automation
+- Placement Prediction using ML
+- Resume Ranking Engine
+- Mobile Application
 
 ---
 
-## 🐍 Trendy GitHub Profile Highlights (Bonus)
+# 🤝 Contributing
 
-To make your GitHub profile standout like modern developer profiles, you can showcase **Placify** using interactive badges and status blocks.
+Contributions are welcome.
 
-### 🎮 Contribution Graph Snake Game
-You can configure a GitHub Action to generate a contribution snake animation that "eats" your commit pixels.
-
-1. Create a workspace file `.github/workflows/snake.yml` in your profile repository:
-```yaml
-name: Generate Snake Animation
-
-on:
-  schedule: # Run every 12 hours
-    - cron: "0 */12 * * *"
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Generate Contribution Snake
-        uses: Platane/snk@v3
-        with:
-          github_user_name: Aakash-780
-          outputs: |
-            dist/github-contribution-grid-snake.svg
-            dist/github-contribution-grid-snake-dark.svg?palette=github-dark
-```
-
-2. Embed the output image in your Profile `README.md`:
-```markdown
-![Snake Contribution Animation](https://raw.githubusercontent.com/Aakash-780/Aakash-780/main/dist/github-contribution-grid-snake.svg)
-```
+Feel free to fork the repository and submit a Pull Request.
 
 ---
 
-## 📄 License
+# 📄 License
 
-This project is licensed under the [MIT License](file:///Users/aakashsrivastava/Desktop/New%20Career%20Bridge/LICENSE).
+Licensed under the MIT License.
 
 ---
 
-*Built with ❤️ using React, TypeScript, InsForge, and Claude AI*
+<p align="center">
+Made with ❤️ using React, TypeScript, PostgreSQL, Tailwind CSS, Gemini AI & Claude AI
+</p>
