@@ -1,0 +1,408 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Outfit:wght@100..900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  background-color: #030712;
+  color: #f9fafb;
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+}
+
+/* Glassmorphism card utility */
+.glass-card {
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card-hover:hover {
+  background: rgba(15, 23, 42, 0.6);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.5);
+}
+
+/* Custom scrollbar styling for tables and lists */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Custom animation keyframes */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pulseBorder {
+  0%, 100% { border-color: rgba(59, 130, 246, 0.2); }
+  50% { border-color: rgba(139, 92, 246, 0.5); }
+}
+
+.animate-pulse-border {
+  animation: pulseBorder 3s infinite ease-in-out;
+}
+
+/* ==========================================
+   Day Mode (Light Mode) Styling Overrides
+   ========================================== */
+html.light,
+html.light body,
+html.light #root,
+html.light .min-h-screen {
+  background-color: #f8fafc !important;
+  /* Radial gradients for dynamic premium backdrop */
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(219, 234, 254, 0.4) 0, transparent 40%),
+    radial-gradient(at 100% 0%, rgba(224, 231, 255, 0.4) 0, transparent 40%) !important;
+  color: #0f172a !important;
+}
+
+/* Background overrides */
+.light .bg-\[\#030712\],
+.light .bg-slate-950,
+.light .bg-slate-900\/60,
+.light .bg-slate-950\/80 {
+  background-color: #ffffff !important;
+}
+
+.light main.bg-\[\#030712\],
+.light .min-h-screen.bg-\[\#030712\] {
+  background-color: transparent !important;
+}
+
+/* Sidebar styling - Sleek and clean */
+.light aside {
+  background-color: #ffffffd0 !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-right: 1px solid #e2e8f0 !important;
+  box-shadow: 4px 0 24px rgba(15, 23, 42, 0.02) !important;
+}
+
+/* Navigation items in sidebar */
+.light aside nav button.text-slate-400 {
+  color: #64748b !important;
+  border: 1px solid transparent;
+}
+.light aside nav button.text-slate-400:hover {
+  color: #0f172a !important;
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0;
+}
+.light aside nav button.bg-blue-500 {
+  background-image: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15) !important;
+}
+
+/* Sidebar user footer */
+.light aside .border-t {
+  border-top-color: #f1f5f9 !important;
+}
+.light aside .text-slate-200 {
+  color: #0f172a !important;
+}
+.light aside .text-slate-500 {
+  color: #64748b !important;
+}
+
+/* Main Header */
+.light header {
+  border-bottom-color: #e2e8f0 !important;
+}
+.light header .text-white {
+  color: #0f172a !important;
+}
+.light header .text-slate-400 {
+  color: #64748b !important;
+}
+.light header button,
+.light header .h-10 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #475569 !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05) !important;
+}
+.light header button:hover {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+/* General border colors */
+.light .border-slate-900,
+.light .border-slate-800,
+.light .border-slate-850 {
+  border-color: #e2e8f0 !important;
+}
+
+/* Cards & containers styling */
+.light .bg-slate-900\/40,
+.light .bg-slate-900\/30,
+.light .bg-slate-900\/10,
+.light .bg-slate-950 {
+  background-color: #ffffff !important;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04), 0 2px 6px -1px rgba(15, 23, 42, 0.02) !important;
+  color: #0f172a !important;
+}
+
+/* Custom dashboard top banner */
+.light .relative.border.border-slate-800.bg-slate-900\/40 {
+  background: linear-gradient(135deg, #eff6ff, #f8fafc) !important;
+  border: 1px solid #dbeafe !important;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.05) !important;
+}
+.light .relative.border.border-slate-800.bg-slate-900\/40 h2 {
+  color: #1e3a8a !important;
+}
+.light .relative.border.border-slate-800.bg-slate-900\/40 p {
+  color: #3b82f6 !important;
+}
+
+/* General Stats Cards on dashboard */
+.light .bg-slate-900\/30 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.03), 0 2px 4px -2px rgba(15, 23, 42, 0.03) !important;
+}
+
+/* Active organization status indicator card */
+.light .border-emerald-500\/20 {
+  border-color: #a7f3d0 !important;
+  background-color: #ecfdf5 !important;
+}
+.light .border-red-500\/20 {
+  border-color: #fecaca !important;
+  background-color: #fef2f2 !important;
+}
+.light .border-amber-500\/20 {
+  border-color: #fde68a !important;
+  background-color: #fffbeb !important;
+}
+.light .border-blue-500\/20 {
+  border-color: #bfdbfe !important;
+  background-color: #eff6ff !important;
+}
+
+/* Tenant Metric Cards left borders - Premium Touch */
+.light .lg\:col-span-2.grid.grid-cols-2.gap-4 > div:nth-child(1) {
+  border-left: 4px solid #8b5cf6 !important;
+}
+.light .lg\:col-span-2.grid.grid-cols-2.gap-4 > div:nth-child(2) {
+  border-left: 4px solid #3b82f6 !important;
+}
+.light .lg\:col-span-2.grid.grid-cols-2.gap-4 > div:nth-child(3) {
+  border-left: 4px solid #10b981 !important;
+}
+.light .lg\:col-span-2.grid.grid-cols-2.gap-4 > div:nth-child(4) {
+  border-left: 4px solid #f59e0b !important;
+}
+
+/* Text colors mapping */
+.light .text-slate-500 {
+  color: #64748b !important;
+}
+.light .text-slate-400 {
+  color: #475569 !important;
+}
+.light .text-slate-300 {
+  color: #334155 !important;
+}
+.light .text-slate-200 {
+  color: #1e293b !important;
+}
+.light .text-white {
+  color: #0f172a !important;
+}
+
+/* Accent status text colors */
+.light .text-blue-400 {
+  color: #2563eb !important;
+}
+.light .text-emerald-400 {
+  color: #059669 !important;
+}
+.light .text-red-400 {
+  color: #dc2626 !important;
+}
+.light .text-purple-400 {
+  color: #7c3aed !important;
+}
+.light .text-amber-400,
+.light .text-yellow-500 {
+  color: #d97706 !important;
+}
+
+/* Tables design - Premium style */
+.light table {
+  background-color: #ffffff !important;
+}
+.light thead tr {
+  background-color: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+.light thead th {
+  color: #475569 !important;
+  font-weight: 600 !important;
+}
+.light tbody tr {
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+.light tbody tr:hover {
+  background-color: #f8fafc80 !important;
+}
+.light tbody td {
+  color: #334155 !important;
+}
+.light tbody td.text-slate-200,
+.light tbody td.font-semibold {
+  color: #0f172a !important;
+}
+.light .divide-slate-900\/60 > * + * {
+  border-color: #f1f5f9 !important;
+}
+
+/* Modals */
+.light .bg-black\/80 {
+  background-color: rgba(15, 23, 42, 0.3) !important;
+  backdrop-filter: blur(4px) !important;
+}
+.light .bg-slate-950 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.15) !important;
+}
+.light .bg-slate-900\/40 {
+  background-color: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Form inputs & selection elements */
+.light input,
+.light select,
+.light textarea {
+  background-color: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f172a !important;
+  border-radius: 0.75rem !important;
+  transition: all 0.2s ease-in-out !important;
+}
+.light input:focus,
+.light select:focus,
+.light textarea:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.08) !important;
+  outline: none !important;
+}
+.light input::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Badges / alerts inside forms */
+.light .bg-purple-500\/10 {
+  background-color: #f5f3ff !important;
+  border-color: #ddd6fe !important;
+  color: #6d28d9 !important;
+}
+.light .bg-purple-500\/10 strong {
+  color: #4c1d95 !important;
+}
+
+.light .bg-emerald-500\/10 {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+  color: #047857 !important;
+}
+
+.light .bg-red-500\/10 {
+  background-color: #fef2f2 !important;
+  border-color: #fecaca !important;
+  color: #b91c1c !important;
+}
+
+.light .bg-yellow-500\/10,
+.light .bg-amber-500\/10 {
+  background-color: #fffbeb !important;
+  border-color: #fde68a !important;
+  color: #b45309 !important;
+}
+
+/* Notifications panel */
+.light .bg-slate-950.shadow-2xl {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.05) !important;
+}
+.light .bg-slate-900\/10 {
+  background-color: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* Glassmorphism custom components */
+.light .glass-card {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border-color: rgba(15, 23, 42, 0.05) !important;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.02) !important;
+}
+.light .glass-card-hover:hover {
+  background: #ffffff !important;
+  border-color: rgba(37, 99, 235, 0.15) !important;
+  box-shadow: 0 12px 24px -10px rgba(37, 99, 235, 0.1) !important;
+}
+
+/* Scrollbar styles for light mode */
+.light ::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.08) !important;
+}
+.light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.15) !important;
+}
+
+/* Light mode button overrides */
+.light .bg-slate-900 {
+  background-color: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+  transition: all 0.2s ease-in-out !important;
+}
+.light .bg-slate-900:hover,
+.light .hover\:bg-slate-800:hover,
+.light .hover\:bg-slate-850:hover {
+  background-color: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light .bg-slate-900\/50 {
+  background-color: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+}
+.light .bg-slate-900\/50:hover {
+  background-color: #e2e8f0 !important;
+}
