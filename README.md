@@ -388,14 +388,6 @@ VITE_CLOUDCONVERT_API_KEY=
 
 ---
 
-# 🤝 Contributing
-
-Contributions are welcome.
-
-Feel free to fork the repository and submit a Pull Request.
-
----
-
 # 📄 License
 
 Licensed under the MIT License.
