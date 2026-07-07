@@ -93,7 +93,8 @@ export default function AuthPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-  const [searchCache, setSearchCache] = useState<Record<string, any[]>>({});
+  const searchCacheRef = useRef<Record<string, any[]>>({});
+  const selectedOrgNameRef = useRef<string>('');
   const orgSelectorRef = useRef<HTMLDivElement>(null);
 
   // Auto transition slide carousel
@@ -128,17 +129,13 @@ export default function AuthPage() {
     const trimmedQuery = searchQuery.trim().toLowerCase();
 
     // Check if the query matches the currently selected organization name to prevent triggering requests
-    if (selectedOrgId) {
-      const selectedOrg = searchResults.find(o => o.id === selectedOrgId) || 
-                          Object.values(searchCache).flat().find(o => o.id === selectedOrgId);
-      if (selectedOrg && searchQuery === `${selectedOrg.name} (${selectedOrg.code})`) {
-        return;
-      }
+    if (selectedOrgId && searchQuery === selectedOrgNameRef.current) {
+      return;
     }
 
     // Check Cache
-    if (searchCache[trimmedQuery]) {
-      setSearchResults(searchCache[trimmedQuery]);
+    if (searchCacheRef.current[trimmedQuery]) {
+      setSearchResults(searchCacheRef.current[trimmedQuery]);
       setShowSuggestions(true);
       return;
     }
@@ -156,7 +153,7 @@ export default function AuthPage() {
         const data = await response.json();
         
         // Cache the result
-        setSearchCache(prev => ({ ...prev, [trimmedQuery]: data }));
+        searchCacheRef.current[trimmedQuery] = data;
         setSearchResults(data);
         setShowSuggestions(true);
       } catch (err) {
@@ -169,7 +166,7 @@ export default function AuthPage() {
     return () => {
       clearTimeout(handler);
     };
-  }, [searchQuery, searchCache, selectedOrgId, searchResults]);
+  }, [searchQuery, selectedOrgId]);
 
   // Keyboard navigation & handlers
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -195,7 +192,9 @@ export default function AuthPage() {
 
   const selectOrg = (org: any) => {
     setSelectedOrgId(org.id);
-    setSearchQuery(`${org.name} (${org.code})`);
+    const orgNameStr = `${org.name} (${org.code})`;
+    selectedOrgNameRef.current = orgNameStr;
+    setSearchQuery(orgNameStr);
     setShowSuggestions(false);
     setActiveIndex(-1);
     setError('');
