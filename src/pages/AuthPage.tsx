@@ -11,9 +11,10 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Mail, Lock, Eye, EyeOff, Loader2, ArrowLeft, Sparkles, Search,
   CheckCircle, ArrowRight, BookOpen, GraduationCap, Cpu, ShieldCheck, AlertCircle, Sun, Moon,
-  Building2
+  Building2, Upload, Globe, ChevronLeft, ChevronRight, Check, AlertTriangle, FileText, Download, ShieldAlert, BadgeCheck, Building, Shield
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { sha256, encryptPassword } from '@/utils/crypto';
 
 const SLIDES = [
   {
@@ -83,9 +84,78 @@ export default function AuthPage() {
   // Multi-tenant States
   const [orgCode, setOrgCode] = useState('');
   const [selectedOrgId, setSelectedOrgId] = useState('');
-  const [intendedRole, setIntendedRole] = useState<'student' | 'recruiter'>('student');
+  const [intendedRole, setIntendedRole] = useState<'student' | 'recruiter' | 'organization'>('student');
   const [collegeId, setCollegeId] = useState('');
   const [organizations, setOrganizations] = useState<any[]>([]);
+
+  // Organization Onboarding States
+  const [onboardingStep, setOnboardingStep] = useState(1);
+  const [generatedCode, setGeneratedCode] = useState('');
+  const [isEditingResubmission, setIsEditingResubmission] = useState(false);
+  const [resubmitRequestId, setResubmitRequestId] = useState('');
+  
+  const [orgForm, setOrgForm] = useState({
+    // Section 1: Org Info
+    name: '',
+    type: 'University',
+    website: '',
+    email: '',
+    phone: '',
+    altPhone: '',
+    country: 'India',
+    state: '',
+    city: '',
+    address: '',
+    postalCode: '',
+    gstNumber: '',
+    regNumber: '',
+    accreditation: 'UGC',
+    logoUrl: '',
+
+    // Section 2: Primary Contact
+    contactName: '',
+    contactDesignation: '',
+    contactEmail: '',
+    contactPhone: '',
+
+    // Section 3: Primary Admin
+    adminName: '',
+    adminEmail: '',
+    adminPhone: '',
+    adminPassword: '',
+    adminConfirmPassword: '',
+
+    // Section 4: Placement Details
+    studentStrength: '',
+    recruiterStrength: '',
+    placementOfficerName: '',
+    placementCellEmail: '',
+    placementCellPhone: '',
+    expectedCompanies: '',
+
+    // Section 5: Documents (Urls)
+    regCertUrl: '',
+    govApprUrl: '',
+    acercCertUrl: '',
+    gstCertUrl: '',
+
+    // Section 6: Terms
+    certifyCorrect: false,
+    agreeTerms: false,
+    agreePrivacy: false,
+  });
+
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const [uploadError, setUploadError] = useState<Record<string, string>>({});
+
+  // Status check states
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusRole, setStatusRole] = useState<'organization' | 'student' | 'recruiter'>('organization');
+  const [statusEmail, setStatusEmail] = useState('');
+  const [statusPassword, setStatusPassword] = useState('');
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [statusResult, setStatusResult] = useState<any>(null);
+  const [statusError, setStatusError] = useState('');
 
   // Searchable Organization Selector States
   const [searchQuery, setSearchQuery] = useState('');
@@ -104,6 +174,346 @@ export default function AuthPage() {
     }, 4500);
     return () => clearInterval(timer);
   }, []);
+
+  // Load draft from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('placify_onboarding_draft');
+    if (saved) {
+      try {
+        const { form, code, step } = JSON.parse(saved);
+        if (form) setOrgForm(form);
+        if (code) setGeneratedCode(code);
+        if (step) setOnboardingStep(step);
+      } catch (e) {
+        console.error("Error loading onboarding draft:", e);
+      }
+    }
+  }, []);
+
+  // Save draft whenever form details change
+  useEffect(() => {
+    if (intendedRole === 'organization') {
+      localStorage.setItem('placify_onboarding_draft', JSON.stringify({
+        form: orgForm,
+        code: generatedCode,
+        step: onboardingStep
+      }));
+    }
+  }, [orgForm, generatedCode, onboardingStep, intendedRole]);
+
+  // Hashing and domain validation helpers
+  const validatePassword = (pass: string) => {
+    if (pass.length < 8) return "Password must be at least 8 characters long.";
+    if (!/[A-Z]/.test(pass)) return "Password must contain at least one uppercase letter.";
+    if (!/[a-z]/.test(pass)) return "Password must contain at least one lowercase letter.";
+    if (!/[0-9]/.test(pass)) return "Password must contain at least one number.";
+    if (!/[!@#$%^&*(),.?\":{}|<>]/.test(pass)) return "Password must contain at least one special character.";
+    return null;
+  };
+
+  const validateOfficialEmail = (emailStr: string) => {
+    const genericDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'zoho.com', 'mail.com', 'yandex.com', 'protonmail.com'];
+    const domain = emailStr.trim().split('@')[1]?.toLowerCase();
+    if (!domain) return false;
+    return !genericDomains.includes(domain);
+  };
+
+  const handleOrgNameBlur = () => {
+    if (orgForm.name.trim()) {
+      generateAndCheckCode(orgForm.name.trim());
+    }
+  };
+
+  const generateAndCheckCode = async (orgName: string) => {
+    if (!orgName.trim()) {
+      setGeneratedCode('');
+      return;
+    }
+    const words = orgName.split(/[\s\-_,\.]+/)
+      .map(w => w.replace(/[^A-Za-z]/g, '').toUpperCase())
+      .filter(Boolean);
+
+    let prefix = '';
+    if (words.length >= 3) {
+      prefix = words[0][0] + words[1][0] + words[2][0];
+    } else if (words.length === 2) {
+      prefix = words[0][0] + words[1][0] + 'X';
+    } else if (words.length === 1) {
+      const single = words[0];
+      if (single.length >= 3) {
+        prefix = single.substring(0, 3);
+      } else if (single.length === 2) {
+        prefix = single + 'X';
+      } else if (single.length === 1) {
+        prefix = single + 'XX';
+      } else {
+        prefix = 'ORG';
+      }
+    } else {
+      prefix = 'ORG';
+    }
+
+    let isUnique = false;
+    let code = '';
+    let attempts = 0;
+
+    while (!isUnique && attempts < 15) {
+      attempts++;
+      const chars = '0123456789';
+      let suffix = '';
+      for (let i = 0; i < 3; i++) {
+        suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      code = `${prefix}${suffix}`;
+
+      try {
+        const { count: orgCount } = await insforge.database
+          .from('organizations')
+          .select('*', { count: 'exact', head: true })
+          .eq('code', code);
+
+        const { count: reqCount } = await insforge.database
+          .from('organization_requests')
+          .select('*', { count: 'exact', head: true })
+          .eq('generated_org_code', code);
+
+        if (orgCount === 0 && reqCount === 0) {
+          isUnique = true;
+        }
+      } catch (e) {
+        console.error("Code check failed:", e);
+        isUnique = true;
+      }
+    }
+    setGeneratedCode(code);
+  };
+
+  const handleFileUpload = async (field: string, bucket: string, file: File) => {
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+    if (file.size > maxSize) {
+      setUploadError(prev => ({ ...prev, [field]: 'File size exceeds 5MB limit.' }));
+      return;
+    }
+    if (!allowedTypes.includes(file.type)) {
+      setUploadError(prev => ({ ...prev, [field]: 'Only PDF, PNG, and JPEG files are allowed.' }));
+      return;
+    }
+
+    setUploadError(prev => ({ ...prev, [field]: '' }));
+    setUploadProgress(prev => ({ ...prev, [field]: 10 }));
+
+    const progressInterval = setInterval(() => {
+      setUploadProgress(prev => {
+        const current = prev[field] || 0;
+        if (current >= 90) {
+          clearInterval(progressInterval);
+          return prev;
+        }
+        return { ...prev, [field]: current + 15 };
+      });
+    }, 150);
+
+    try {
+      const storagePath = `org-onboarding/${Date.now()}_${file.name}`;
+      const { data, error } = await insforge.storage.from(bucket).upload(storagePath, file);
+
+      clearInterval(progressInterval);
+      if (error) throw error;
+
+      const fileUrl = insforge.storage.from(bucket).getPublicUrl(storagePath);
+
+      setUploadProgress(prev => ({ ...prev, [field]: 100 }));
+      setOrgForm(prev => ({ ...prev, [field]: fileUrl }));
+      
+      if (field === 'logo') {
+        setOrgForm(prev => ({ ...prev, logoUrl: fileUrl }));
+      }
+    } catch (err: any) {
+      clearInterval(progressInterval);
+      setUploadProgress(prev => ({ ...prev, [field]: 0 }));
+      setUploadError(prev => ({ ...prev, [field]: err.message || 'Upload failed. Please try again.' }));
+    }
+  };
+
+  const handleCheckStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatusError('');
+    setStatusResult(null);
+    setStatusLoading(true);
+
+    try {
+      if (statusRole === 'organization') {
+        const { data, error } = await insforge.database
+          .from('organization_requests')
+          .select('*')
+          .eq('admin_email', statusEmail.trim())
+          .maybeSingle();
+
+        if (error) throw error;
+        if (!data) {
+          setStatusError('No onboarding request found with this admin email.');
+          setStatusLoading(false);
+          return;
+        }
+
+        const inputHash = await sha256(statusPassword);
+        if (inputHash !== data.password_hash) {
+          setStatusError('Invalid credentials. Password check failed.');
+          setStatusLoading(false);
+          return;
+        }
+
+        setStatusResult({
+          role: 'organization',
+          status: data.status,
+          organization_name: data.organization_name,
+          generated_org_code: data.generated_org_code,
+          submitted_at: data.submitted_at,
+          remarks: data.remarks
+        });
+      } else {
+        // Authenticate student/recruiter via GoTrue first to verify ownership
+        const { data: authData, error: authErr } = await insforge.auth.signInWithPassword({
+          email: statusEmail.trim(),
+          password: statusPassword
+        });
+
+        if (authErr) {
+          throw new Error(authErr.message || 'Invalid email or password.');
+        }
+
+        if (!authData?.user) {
+          throw new Error('Could not verify account profile ownership.');
+        }
+
+        if (statusRole === 'student') {
+          const { data: student, error: stdErr } = await insforge.database
+            .from('students')
+            .select('status, name, college_id, created_at, organization_id')
+            .eq('user_id', authData.user.id)
+            .maybeSingle();
+
+          if (stdErr) throw stdErr;
+          if (!student) {
+            throw new Error('Student registration profile record not found.');
+          }
+
+          let orgName = 'Independent User';
+          if (student.organization_id) {
+            const { data: org } = await insforge.database
+              .from('organizations')
+              .select('name')
+              .eq('id', student.organization_id)
+              .maybeSingle();
+            if (org) orgName = org.name;
+          }
+
+          setStatusResult({
+            role: 'student',
+            status: student.status,
+            name: student.name,
+            organization_name: orgName,
+            generated_org_code: student.college_id || 'N/A',
+            submitted_at: student.created_at
+          });
+        } else if (statusRole === 'recruiter') {
+          const { data: recruiter, error: recErr } = await insforge.database
+            .from('recruiters')
+            .select('verification_status, name, company, created_at, organization_id')
+            .eq('user_id', authData.user.id)
+            .maybeSingle();
+
+          if (recErr) throw recErr;
+          if (!recruiter) {
+            throw new Error('Recruiter registration profile record not found.');
+          }
+
+          let orgName = 'Independent Recruiter';
+          if (recruiter.organization_id) {
+            const { data: org } = await insforge.database
+              .from('organizations')
+              .select('name')
+              .eq('id', recruiter.organization_id)
+              .maybeSingle();
+            if (org) orgName = org.name;
+          }
+
+          setStatusResult({
+            role: 'recruiter',
+            status: recruiter.verification_status,
+            name: recruiter.name,
+            organization_name: orgName,
+            generated_org_code: recruiter.company || 'N/A',
+            submitted_at: recruiter.created_at
+          });
+        }
+
+        // Always log out immediately so check doesn't pollute session state
+        await insforge.auth.signOut();
+      }
+    } catch (err: any) {
+      setStatusError(err.message || 'Status check failed.');
+      try {
+        await insforge.auth.signOut();
+      } catch {}
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  const handleEditResubmissionRequest = (req: any) => {
+    setOrgForm({
+      name: req.organization_name,
+      type: req.organization_type,
+      website: req.website || '',
+      email: req.organization_email,
+      phone: req.contact_phone || '',
+      altPhone: req.alternate_phone || '',
+      country: req.country || 'India',
+      state: req.state || '',
+      city: req.city || '',
+      address: req.address || '',
+      postalCode: req.postal_code || '',
+      gstNumber: req.gst_number || '',
+      regNumber: req.registration_number,
+      accreditation: req.accreditation || 'UGC',
+      logoUrl: req.logo_url || '',
+
+      contactName: req.primary_contact_name || '',
+      contactDesignation: req.primary_contact_designation || '',
+      contactEmail: req.primary_contact_email || '',
+      contactPhone: req.primary_contact_phone || '',
+
+      adminName: req.admin_name || '',
+      adminEmail: req.admin_email,
+      adminPhone: req.admin_phone || '',
+      adminPassword: '', // do not display
+      adminConfirmPassword: '',
+
+      studentStrength: req.student_strength ? String(req.student_strength) : '',
+      recruiterStrength: '',
+      placementOfficerName: req.placement_officer || '',
+      placementCellEmail: req.placement_email || '',
+      placementCellPhone: req.placement_phone || '',
+      expectedCompanies: req.expected_companies || '',
+
+      regCertUrl: req.registration_certificate || '',
+      govApprUrl: req.government_certificate || '',
+      acercCertUrl: req.accreditation_certificate || '',
+      gstCertUrl: req.gst_certificate || '',
+
+      certifyCorrect: true,
+      agreeTerms: true,
+      agreePrivacy: true,
+    });
+    setGeneratedCode(req.generated_org_code);
+    setIsEditingResubmission(true);
+    setResubmitRequestId(req.id);
+    setOnboardingStep(1);
+    setIntendedRole('organization');
+    setShowStatusModal(false);
+  };
 
   // Handle click outside suggestions dropdown
   useEffect(() => {
@@ -220,6 +630,210 @@ export default function AuthPage() {
       setLoading(false);
     }
   }
+
+  const handleOrganizationSubmit = async () => {
+    setError('');
+    setSuccessMsg('');
+
+    if (!orgForm.certifyCorrect || !orgForm.agreeTerms || !orgForm.agreePrivacy) {
+      setError('Please certify accuracy and agree to terms & privacy policy.');
+      return;
+    }
+
+    if (!orgForm.name.trim() || !orgForm.email.trim() || !orgForm.logoUrl || !orgForm.contactEmail.trim() || !orgForm.contactName.trim()) {
+      setError('All required fields must be populated.');
+      return;
+    }
+
+    if (!validateOfficialEmail(orgForm.email)) {
+      setError('Organization email must use an official domain (free webmail like Gmail/Yahoo is not allowed).');
+      return;
+    }
+    if (!validateOfficialEmail(orgForm.contactEmail)) {
+      setError('Official contact email must use an official domain (free webmail like Gmail/Yahoo is not allowed).');
+      return;
+    }
+
+    if (!isEditingResubmission) {
+      const passErr = validatePassword(orgForm.adminPassword);
+      if (passErr) {
+        setError(passErr);
+        return;
+      }
+      if (orgForm.adminPassword !== orgForm.adminConfirmPassword) {
+        setError('Passwords do not match.');
+        return;
+      }
+    }
+
+    setLoading(true);
+
+    try {
+      // 1. Uniqueness checks
+      const { count: orgNameCount } = await insforge.database
+        .from('organizations')
+        .select('*', { count: 'exact', head: true })
+        .ilike('name', orgForm.name.trim());
+      const { count: reqNameCount } = await insforge.database
+        .from('organization_requests')
+        .select('*', { count: 'exact', head: true })
+        .neq('id', isEditingResubmission ? resubmitRequestId : '00000000-0000-0000-0000-000000000000')
+        .neq('status', 'Rejected')
+        .ilike('organization_name', orgForm.name.trim());
+      if (orgNameCount > 0 || reqNameCount > 0) {
+        throw new Error('An organization with this name already exists or onboarding is in progress.');
+      }
+
+      if (orgForm.website.trim()) {
+        const { count: orgWebCount } = await insforge.database
+          .from('organizations')
+          .select('*', { count: 'exact', head: true })
+          .eq('website', orgForm.website.trim());
+        const { count: reqWebCount } = await insforge.database
+          .from('organization_requests')
+          .select('*', { count: 'exact', head: true })
+          .neq('id', isEditingResubmission ? resubmitRequestId : '00000000-0000-0000-0000-000000000000')
+          .neq('status', 'Rejected')
+          .eq('website', orgForm.website.trim());
+        if (orgWebCount > 0 || reqWebCount > 0) {
+          throw new Error('An organization with this website is already registered or requested.');
+        }
+      }
+
+      // Check if organization email is already requested
+      const { count: reqOrgEmailCount } = await insforge.database
+        .from('organization_requests')
+        .select('*', { count: 'exact', head: true })
+        .neq('id', isEditingResubmission ? resubmitRequestId : '00000000-0000-0000-0000-000000000000')
+        .neq('status', 'Rejected')
+        .eq('organization_email', orgForm.email.trim());
+      if (reqOrgEmailCount > 0) {
+        throw new Error('This organization email address is already associated with an onboarding request in progress.');
+      }
+
+      const { count: adminEmailCount } = await insforge.database
+        .from('admins')
+        .select('*', { count: 'exact', head: true })
+        .eq('email', orgForm.contactEmail.trim());
+      const { count: reqAdminEmailCount } = await insforge.database
+        .from('organization_requests')
+        .select('*', { count: 'exact', head: true })
+        .neq('id', isEditingResubmission ? resubmitRequestId : '00000000-0000-0000-0000-000000000000')
+        .neq('status', 'Rejected')
+        .eq('admin_email', orgForm.contactEmail.trim());
+      if (adminEmailCount > 0 || reqAdminEmailCount > 0) {
+        throw new Error('An admin account or onboarding request is already using this admin email address.');
+      }
+
+      let passHash = '';
+      let passEnc = '';
+      if (orgForm.adminPassword) {
+        passHash = await sha256(orgForm.adminPassword);
+        passEnc = encryptPassword(orgForm.adminPassword);
+      }
+
+      const payload: any = {
+        organization_name: orgForm.name.trim(),
+        generated_org_code: generatedCode,
+        organization_type: orgForm.type,
+        website: orgForm.website.trim() || null,
+        organization_email: orgForm.email.trim(),
+        contact_phone: orgForm.phone.trim() || null,
+        alternate_phone: null,
+        country: null,
+        state: null,
+        city: null,
+        address: null,
+        postal_code: null,
+        gst_number: null,
+        registration_number: 'REG-' + generatedCode,
+        accreditation: null,
+        logo_url: orgForm.logoUrl || null,
+
+        primary_contact_name: orgForm.contactName.trim() || null,
+        primary_contact_designation: orgForm.contactDesignation.trim() || null,
+        primary_contact_email: orgForm.contactEmail.trim() || null,
+        primary_contact_phone: orgForm.contactPhone.trim() || null,
+
+        admin_name: orgForm.contactName.trim() || null,
+        admin_email: orgForm.contactEmail.trim(),
+        admin_phone: orgForm.contactPhone.trim() || null,
+
+        student_strength: null,
+        placement_officer: null,
+        placement_email: null,
+        placement_phone: null,
+        expected_companies: null,
+
+        registration_certificate: orgForm.regCertUrl || null,
+        government_certificate: null,
+        accreditation_certificate: null,
+        gst_certificate: orgForm.gstCertUrl || null,
+        status: 'Pending',
+        remarks: null,
+      };
+
+      if (passHash && passEnc) {
+        payload.password_hash = passHash;
+        payload.temp_password = passEnc;
+      }
+
+      if (isEditingResubmission) {
+        payload.submitted_at = new Date().toISOString();
+        const { error: resubErr } = await insforge.database
+          .from('organization_requests')
+          .update(payload)
+          .eq('id', resubmitRequestId);
+        if (resubErr) throw resubErr;
+        setSuccessMsg('Onboarding request resubmitted successfully! Platform Owner will review your changes.');
+      } else {
+        const { error: insertErr } = await insforge.database
+          .from('organization_requests')
+          .insert([payload]);
+        if (insertErr) throw insertErr;
+        setSuccessMsg('Onboarding request submitted successfully! Your credentials will be active after approval.');
+      }
+
+      localStorage.removeItem('placify_onboarding_draft');
+      setIsEditingResubmission(false);
+      setResubmitRequestId('');
+      setOnboardingStep(1);
+      setGeneratedCode('');
+      setOrgForm({
+        name: '', type: 'University', website: '', email: '', phone: '', altPhone: '',
+        country: 'India', state: '', city: '', address: '', postalCode: '', gstNumber: '',
+        regNumber: '', accreditation: 'UGC', logoUrl: '',
+        contactName: '', contactDesignation: '', contactEmail: '', contactPhone: '',
+        adminName: '', adminEmail: '', adminPhone: '', adminPassword: '', adminConfirmPassword: '',
+        studentStrength: '', recruiterStrength: '', placementOfficerName: '', placementCellEmail: '',
+        placementCellPhone: '', expectedCompanies: '', regCertUrl: '', govApprUrl: '',
+        acercCertUrl: '', gstCertUrl: '', certifyCorrect: false, agreeTerms: false, agreePrivacy: false
+      });
+      
+      setTimeout(() => {
+        setMode('signin');
+        setSuccessMsg('');
+      }, 5000);
+    } catch (err: any) {
+      let friendlyError = err.message || 'Onboarding submission failed. Please verify inputs and try again.';
+      if (typeof friendlyError === 'string') {
+        if (friendlyError.includes('organization_requests_organization_email_key')) {
+          friendlyError = 'An onboarding request has already been submitted for this organization email. Please check your existing request status.';
+        } else if (friendlyError.includes('organization_requests_admin_email_key')) {
+          friendlyError = 'An onboarding request or admin account is already using this primary contact email address.';
+        } else if (friendlyError.includes('organization_requests_generated_org_code_key')) {
+          friendlyError = 'A code collision occurred. Please try submitting again to regenerate your tenant code.';
+        } else if (friendlyError.includes('organization_requests_registration_number_key')) {
+          friendlyError = 'This organization registration code is already registered.';
+        } else if (friendlyError.includes('organization_requests_website_key')) {
+          friendlyError = 'This organization website is already associated with another onboarding request.';
+        }
+      }
+      setError(friendlyError);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -526,6 +1140,536 @@ export default function AuthPage() {
     );
   };
 
+  const handleNextStep = () => {
+    setError('');
+    if (onboardingStep === 1) {
+      if (!orgForm.name.trim() || !orgForm.email.trim()) {
+        setError('Please populate all required organization fields.');
+        return;
+      }
+      if (!orgForm.logoUrl) {
+        setError('Organization logo is required.');
+        return;
+      }
+      if (!validateOfficialEmail(orgForm.email)) {
+        setError('Organization email must be on an official corporate/educational domain.');
+        return;
+      }
+      if (!generatedCode) {
+        setError('Generating organization code, please stand by...');
+        generateAndCheckCode(orgForm.name);
+        return;
+      }
+    } else if (onboardingStep === 2) {
+      if (!orgForm.contactName.trim() || !orgForm.contactDesignation.trim() || !orgForm.contactEmail.trim() || !orgForm.contactPhone.trim()) {
+        setError('Please fill in all primary contact and admin fields.');
+        return;
+      }
+      if (!validateOfficialEmail(orgForm.contactEmail)) {
+        setError('Official email must be on an official domain.');
+        return;
+      }
+      if (!isEditingResubmission) {
+        const passErr = validatePassword(orgForm.adminPassword);
+        if (passErr) {
+          setError(passErr);
+          return;
+        }
+        if (orgForm.adminPassword !== orgForm.adminConfirmPassword) {
+          setError('Passwords do not match.');
+          return;
+        }
+      }
+    }
+    setOnboardingStep(prev => prev + 1);
+  };
+
+  const renderOrganizationWizard = () => {
+    const stepsList = [
+      { num: 1, label: 'Info' },
+      { num: 2, label: 'Admin' },
+      { num: 3, label: 'Documents' },
+      { num: 4, label: 'Terms' }
+    ];
+
+    const isUploading = Object.values(uploadProgress).some(p => p > 0 && p < 100);
+
+    return (
+      <div className="space-y-6 font-sans">
+        {/* Step Indicator Header */}
+        <div className="flex items-center justify-between border-b pb-4 border-border/60">
+          <div className="flex gap-2 items-center">
+            <Building className="w-5 h-5 text-primary" />
+            <span className="text-sm font-extrabold text-foreground font-heading">
+              {isEditingResubmission ? 'Resubmit Onboarding' : 'Organization Setup'}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-muted-foreground font-medium flex items-center gap-1 bg-muted/40 px-2 py-0.5 rounded-md border border-border/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+              Draft saved locally
+            </span>
+          </div>
+        </div>
+
+        {/* Stepper */}
+        <div className="relative flex items-center justify-between px-2">
+          <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-muted -translate-y-1/2 z-0" />
+          <div 
+            className="absolute top-1/2 left-0 h-0.5 bg-primary -translate-y-1/2 z-0 transition-all duration-300"
+            style={{ width: `${((onboardingStep - 1) / 3) * 100}%` }}
+          />
+          {stepsList.map(step => (
+            <button
+              key={step.num}
+              type="button"
+              disabled={step.num > onboardingStep && !isEditingResubmission}
+              onClick={() => { setError(''); setOnboardingStep(step.num); }}
+              className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all border ${
+                onboardingStep === step.num
+                  ? 'bg-primary text-primary-foreground border-primary scale-110 shadow-md shadow-primary/15'
+                  : onboardingStep > step.num
+                    ? 'bg-background text-primary border-primary'
+                    : 'bg-muted text-muted-foreground border-border'
+              }`}
+            >
+              {step.num}
+            </button>
+          ))}
+        </div>
+
+        {/* STEP 1: ORGANIZATION DETAILS */}
+        {onboardingStep === 1 && (
+          <div className="space-y-4 animate-fade-in">
+            <div className="grid grid-cols-2 gap-3.5">
+              <div className="space-y-1.5 col-span-2">
+                <Label htmlFor="orgName" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Organization Name *</Label>
+                <Input
+                  id="orgName"
+                  value={orgForm.name}
+                  onChange={e => setOrgForm({ ...orgForm, name: e.target.value })}
+                  onBlur={handleOrgNameBlur}
+                  placeholder="e.g. Manipal University Jaipur"
+                  className="h-10 rounded-xl bg-background/30"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Organization Type *</Label>
+                <Select
+                  value={orgForm.type}
+                  onValueChange={val => setOrgForm({ ...orgForm, type: val })}
+                >
+                  <SelectTrigger className="h-10 rounded-xl bg-background/30 border-border">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border border-border">
+                    {['University', 'College', 'Institute', 'Training Center', 'Company', 'Government Organization', 'Other'].map(t => (
+                      <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="orgWebsite" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Website URL</Label>
+                <div className="relative">
+                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                  <Input
+                    id="orgWebsite"
+                    value={orgForm.website}
+                    onChange={e => setOrgForm({ ...orgForm, website: e.target.value })}
+                    placeholder="https://example.edu"
+                    className="h-10 rounded-xl pl-9 bg-background/30"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                <Label htmlFor="orgEmail" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Official Email *</Label>
+                <Input
+                  id="orgEmail"
+                  type="email"
+                  value={orgForm.email}
+                  onChange={e => setOrgForm({ ...orgForm, email: e.target.value })}
+                  placeholder="admin@university.edu"
+                  className="h-10 rounded-xl bg-background/30"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                <Label htmlFor="orgPhone" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Phone Number</Label>
+                <Input
+                  id="orgPhone"
+                  value={orgForm.phone}
+                  onChange={e => setOrgForm({ ...orgForm, phone: e.target.value })}
+                  placeholder="+91 9876543210"
+                  className="h-10 rounded-xl bg-background/30"
+                />
+              </div>
+
+
+
+              {/* Unique Generated Code and Logo Upload */}
+              <div className="space-y-1.5 col-span-2 border-t border-border/40 pt-4 mt-2">
+                <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground block">Tenant Code (Auto-Generated)</Label>
+                <div className="flex gap-2 items-center">
+                  <Input
+                    value={generatedCode || 'Provide name to generate code...'}
+                    disabled
+                    className="h-10 rounded-xl bg-muted/40 font-mono text-sm tracking-wider font-extrabold uppercase text-slate-400 border-border/80 flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => generateAndCheckCode(orgForm.name)}
+                    className="h-10 px-4 rounded-xl text-xs font-bold border-border/85"
+                    disabled={!orgForm.name}
+                  >
+                    Regenerate
+                  </Button>
+                </div>
+                <span className="text-[9px] text-muted-foreground">Unique code generated using prefix from org name and a random alphanumeric key.</span>
+              </div>
+
+              <div className="space-y-2 col-span-2 border-t border-border/40 pt-4">
+                <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Organization Logo *</Label>
+                <div className="flex items-center gap-4">
+                  {orgForm.logoUrl ? (
+                    <div className="relative group border rounded-xl overflow-hidden bg-slate-900 w-16 h-16 border-border">
+                      <img src={orgForm.logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                      <button
+                        type="button"
+                        onClick={() => setOrgForm({ ...orgForm, logoUrl: '', logo: '' } as any)}
+                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-bold transition-opacity"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-16 h-16 rounded-xl border border-dashed border-border/80 flex items-center justify-center text-muted-foreground bg-muted/10">
+                      <Building className="w-5 h-5 opacity-40" />
+                    </div>
+                  )}
+
+                  <div className="flex-1">
+                    <div className="relative">
+                      <input
+                        type="file"
+                        id="logoUploadInput"
+                        onChange={e => e.target.files && handleFileUpload('logo', 'profile-images', e.target.files[0])}
+                        accept="image/png, image/jpeg, image/jpg"
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => document.getElementById('logoUploadInput')?.click()}
+                        className="h-9 text-xs font-bold border-border"
+                      >
+                        <Upload className="w-3.5 h-3.5 mr-1.5" />
+                        {orgForm.logoUrl ? 'Change Logo' : 'Upload Logo'}
+                      </Button>
+                      {uploadProgress['logo'] !== undefined && uploadProgress['logo'] < 100 && uploadProgress['logo'] > 0 && (
+                        <div className="text-[10px] mt-1 text-primary font-bold">Uploading: {uploadProgress['logo']}%</div>
+                      )}
+                      {uploadError['logo'] && (
+                        <div className="text-[10px] mt-1 text-destructive font-semibold flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" /> {uploadError['logo']}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 2: PRIMARY ADMIN & CONTACT DETAILS */}
+        {onboardingStep === 2 && (
+          <div className="space-y-4 animate-fade-in">
+            <div className="p-3 bg-primary/5 rounded-xl border border-primary/20 text-xs text-primary leading-relaxed">
+              <div className="font-bold flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5" />
+                Primary Contact & Admin Account
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                This person will act as the primary contact and their account will be configured as the master administrator for your tenant organization dashboard upon approval.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="contactName" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Contact Person Name *</Label>
+              <Input
+                id="contactName"
+                value={orgForm.contactName}
+                onChange={e => setOrgForm({ ...orgForm, contactName: e.target.value })}
+                placeholder="Full Name"
+                className="h-10 rounded-xl bg-background/30"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="contactDesignation" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Designation *</Label>
+              <Input
+                id="contactDesignation"
+                value={orgForm.contactDesignation}
+                onChange={e => setOrgForm({ ...orgForm, contactDesignation: e.target.value })}
+                placeholder="e.g. Dean of Placements, Coordinator"
+                className="h-10 rounded-xl bg-background/30"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="contactEmail" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Official Email *</Label>
+              <Input
+                id="contactEmail"
+                type="email"
+                value={orgForm.contactEmail}
+                onChange={e => setOrgForm({ ...orgForm, contactEmail: e.target.value })}
+                placeholder="name@university.edu"
+                className="h-10 rounded-xl bg-background/30"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="contactPhone" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Phone Number *</Label>
+              <Input
+                id="contactPhone"
+                value={orgForm.contactPhone}
+                onChange={e => setOrgForm({ ...orgForm, contactPhone: e.target.value })}
+                placeholder="+91 9000000001"
+                className="h-10 rounded-xl bg-background/30"
+                required
+              />
+            </div>
+
+            {!isEditingResubmission && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="adminPass" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Password *</Label>
+                  <Input
+                    id="adminPass"
+                    type="password"
+                    value={orgForm.adminPassword}
+                    onChange={e => setOrgForm({ ...orgForm, adminPassword: e.target.value })}
+                    placeholder="Enter strong password"
+                    className="h-10 rounded-xl bg-background/30"
+                    required
+                  />
+                  {orgForm.adminPassword && (
+                    <div className="text-[9px] text-muted-foreground leading-tight space-y-1 bg-muted/20 border border-border/30 rounded-lg p-2 mt-1">
+                      <div className="font-bold text-slate-500 uppercase">Enterprise Policy:</div>
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-1.5 h-1.5 rounded-full ${orgForm.adminPassword.length >= 8 ? 'bg-emerald-500' : 'bg-muted-foreground/30'}`} />
+                        <span>Min. 8 characters</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-1.5 h-1.5 rounded-full ${/[A-Z]/.test(orgForm.adminPassword) ? 'bg-emerald-500' : 'bg-muted-foreground/30'}`} />
+                        <span>At least one uppercase character (A-Z)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-1.5 h-1.5 rounded-full ${/[a-z]/.test(orgForm.adminPassword) ? 'bg-emerald-500' : 'bg-muted-foreground/30'}`} />
+                        <span>At least one lowercase character (a-z)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-1.5 h-1.5 rounded-full ${/[0-9]/.test(orgForm.adminPassword) ? 'bg-emerald-500' : 'bg-muted-foreground/30'}`} />
+                        <span>At least one numeric digit (0-9)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-1.5 h-1.5 rounded-full ${/[!@#$%^&*(),.?\":{}|<>]/.test(orgForm.adminPassword) ? 'bg-emerald-500' : 'bg-muted-foreground/30'}`} />
+                        <span>At least one special character</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="adminConfirmPass" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Confirm Password *</Label>
+                  <Input
+                    id="adminConfirmPass"
+                    type="password"
+                    value={orgForm.adminConfirmPassword}
+                    onChange={e => setOrgForm({ ...orgForm, adminConfirmPassword: e.target.value })}
+                    placeholder="Verify password"
+                    className="h-10 rounded-xl bg-background/30"
+                    required
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* STEP 3: DOCUMENTS UPLOADER */}
+        {onboardingStep === 3 && (
+          <div className="space-y-4 animate-fade-in">
+            <p className="text-[11px] text-muted-foreground">
+              Please upload verifying documents of the organization. Only PDF, PNG, and JPEG documents under 5MB are accepted. (All uploads are optional)
+            </p>
+
+            {[
+              { id: 'regCertUrl', label: 'Registration Certificate (Optional)', fieldName: 'regCertUploadInput' },
+              { id: 'gstCertUrl', label: 'GST Registration Certificate (Optional)', fieldName: 'gstCertUploadInput' }
+            ].map(doc => (
+              <div key={doc.id} className="p-3.5 border border-dashed rounded-xl bg-muted/5 space-y-2 border-border">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wide">{doc.label}</span>
+                  {orgForm[doc.id as keyof typeof orgForm] && (
+                    <span className="text-[9px] text-emerald-500 font-extrabold flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" /> Uploaded
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex gap-3 items-center">
+                  <input
+                    type="file"
+                    id={doc.fieldName}
+                    onChange={e => e.target.files && handleFileUpload(doc.id, 'certificates', e.target.files[0])}
+                    accept="application/pdf, image/png, image/jpeg"
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => document.getElementById(doc.fieldName)?.click()}
+                    className="h-8 text-[10px] font-bold"
+                  >
+                    <Upload className="w-3.5 h-3.5 mr-1.5" />
+                    Upload File
+                  </Button>
+
+                  {orgForm[doc.id as keyof typeof orgForm] && (
+                    <a
+                      href={orgForm[doc.id as keyof typeof orgForm] as string}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-primary font-bold hover:underline truncate max-w-52"
+                    >
+                      View Uploaded Document
+                    </a>
+                  )}
+                </div>
+
+                {uploadProgress[doc.id] !== undefined && uploadProgress[doc.id] < 100 && uploadProgress[doc.id] > 0 && (
+                  <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden mt-1">
+                    <div className="bg-primary h-full transition-all" style={{ width: `${uploadProgress[doc.id]}%` }} />
+                  </div>
+                )}
+                {uploadError[doc.id] && (
+                  <div className="text-[10px] text-destructive font-semibold mt-1 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" /> {uploadError[doc.id]}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* STEP 4: TERMS */}
+        {onboardingStep === 4 && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="p-3.5 border rounded-2xl bg-slate-950/20 border-slate-800 space-y-4">
+              <h4 className="text-[10px] font-bold text-slate-300 uppercase tracking-widest flex items-center gap-1">
+                <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                Legal Declarations & Authorizations
+              </h4>
+
+              <div className="space-y-3">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={orgForm.certifyCorrect}
+                    onChange={e => setOrgForm({ ...orgForm, certifyCorrect: e.target.checked })}
+                    className="w-4 h-4 mt-0.5 rounded accent-primary border-slate-700 bg-background"
+                  />
+                  <span className="text-[11px] text-slate-400 font-medium leading-tight select-none">
+                    I certify that all details, coordinates, and uploaded certificates provided in this onboarding request are correct and valid. *
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={orgForm.agreeTerms}
+                    onChange={e => setOrgForm({ ...orgForm, agreeTerms: e.target.checked })}
+                    className="w-4 h-4 mt-0.5 rounded accent-primary border-slate-700 bg-background"
+                  />
+                  <span className="text-[11px] text-slate-400 font-medium leading-tight select-none">
+                    I represent the college/institution placement cell and agree to the Placify Enterprise Terms of Service. *
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={orgForm.agreePrivacy}
+                    onChange={e => setOrgForm({ ...orgForm, agreePrivacy: e.target.checked })}
+                    className="w-4 h-4 mt-0.5 rounded accent-primary border-slate-700 bg-background"
+                  />
+                  <span className="text-[11px] text-slate-400 font-medium leading-tight select-none">
+                    I authorize Placify to audit the institution credentials and verify organization details per the Privacy Policy. *
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Navigation Action CTA Buttons */}
+        <div className="flex justify-between gap-3 border-t border-border/40 pt-4 mt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setError('');
+              if (onboardingStep > 1) {
+                setOnboardingStep(prev => prev - 1);
+              } else {
+                setIntendedRole('student');
+              }
+            }}
+            className="h-10 px-4 text-xs font-bold border-border/85"
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" />
+            Back
+          </Button>
+
+          {onboardingStep < 4 ? (
+            <Button
+              type="button"
+              onClick={handleNextStep}
+              className="h-10 px-5 text-xs font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20"
+            >
+              Next
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              onClick={handleOrganizationSubmit}
+              disabled={loading || isUploading}
+              className="h-10 px-6 text-xs font-extrabold shadow-md shadow-primary/15 hover:shadow-lg hover:shadow-primary/25 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {loading ? (
+                <><Loader2 className="w-4.5 h-4.5 mr-1.5 animate-spin" /> Submitting...</>
+              ) : (
+                isEditingResubmission ? 'Resubmit Onboarding' : 'Submit Onboarding Request'
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background flex select-none overflow-hidden relative font-body transition-colors duration-300">
       
@@ -677,59 +1821,230 @@ export default function AuthPage() {
               </div>
             )}
             {/* Auth Form input structure */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {mode === 'verify' ? (
-                <>
-                  {/* Email Input */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="email" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
-                      Email Address
-                    </Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
-                      <Input
-                        id="email"
-                        type="email"
-                        value={email}
-                        onChange={e => { setEmail(e.target.value); setError(''); }}
-                        placeholder="name@university.edu"
-                        className="pl-10 h-11 rounded-xl border-border/80 focus-visible:ring-primary/20 bg-background/30 font-sans text-sm"
-                        required
-                      />
+            {mode === 'signup' && intendedRole === 'organization' ? (
+              renderOrganizationWizard()
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {mode === 'verify' ? (
+                  <>
+                    {/* Email Input */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="email" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                        Email Address
+                      </Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                        <Input
+                          id="email"
+                          type="email"
+                          value={email}
+                          onChange={e => { setEmail(e.target.value); setError(''); }}
+                          placeholder="name@university.edu"
+                          className="pl-10 h-11 rounded-xl border-border/80 focus-visible:ring-primary/20 bg-background/30 font-sans text-sm"
+                          required
+                        />
+                      </div>
                     </div>
-                  </div>
 
-                  {/* OTP Verification Code */}
+                    {/* OTP Verification Code */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <Label htmlFor="verificationCode" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                          6-Digit OTP Code
+                        </Label>
+                        <button 
+                          type="button" 
+                          onClick={handleResendCode}
+                          className="text-[10px] sm:text-xs text-primary font-semibold hover:underline"
+                          disabled={loading}
+                        >
+                          Resend Code
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                        <Input
+                          id="verificationCode"
+                          type="text"
+                          value={verificationCode}
+                          onChange={e => { setVerificationCode(e.target.value); setError(''); }}
+                          placeholder="e.g. 759864"
+                          className="pl-10 h-11 rounded-xl border-border/80 focus-visible:ring-primary/20 bg-background/30 font-sans text-sm font-mono tracking-widest text-center text-lg font-bold"
+                          maxLength={6}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Submit CTA */}
+                    <Button 
+                      type="submit" 
+                      className="w-full h-11 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 active:scale-[0.99] transition-all" 
+                      size="lg" 
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <><Loader2 className="w-4.5 h-4.5 mr-2 animate-spin" /> Verifying...</>
+                      ) : (
+                        'Verify & Sign In'
+                      )}
+                    </Button>
+
+                    <div className="text-center pt-2">
+                      <button
+                        type="button"
+                        onClick={() => { setMode('signin'); setError(''); setSuccessMsg(''); }}
+                        className="text-xs text-muted-foreground hover:text-foreground font-semibold"
+                      >
+                        Back to Sign In
+                      </button>
+                    </div>
+                  </>
+                ) : mode === 'signin' ? (
+                  <>
+                    {/* Organization Dropdown */}
+                    {email.trim() !== 'sahilsrivastava8962@gmail.com' && renderOrgSelector('signin')}
+
+                    {/* Email or College ID */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="email" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                        {email.trim() === 'sahilsrivastava8962@gmail.com' ? 'Email Address' : 'Email Address or College ID'}
+                      </Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                        <Input
+                          id="email"
+                          type="text"
+                          value={email}
+                          onChange={e => { setEmail(e.target.value); setError(''); }}
+                          placeholder={email.trim() === 'sahilsrivastava8962@gmail.com' ? "name@university.edu" : "Email or College ID"}
+                          className="pl-10 h-11 rounded-xl border-border/80 focus-visible:ring-primary/20 bg-background/30 font-sans text-sm"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Organization Dropdown */}
+                    {renderOrgSelector('signup')}
+
+                    {/* Register As Role */}
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                        Register As
+                      </Label>
+                      <div className="flex gap-2">
+                        {['student', 'recruiter', 'organization'].map(r => (
+                          <button
+                            key={r}
+                            type="button"
+                            onClick={() => { setIntendedRole(r as any); setError(''); }}
+                            className={`flex-1 py-2.5 text-[10px] sm:text-xs font-extrabold rounded-xl border transition-all uppercase tracking-wider ${
+                              intendedRole === r
+                                ? 'border-primary bg-primary/5 text-primary shadow-sm shadow-primary/5'
+                                : 'border-border/85 bg-background/30 text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            {r}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* College ID (Student only) */}
+                    {intendedRole === 'student' && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="collegeId" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                          College ID
+                        </Label>
+                        <div className="relative">
+                          <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                          <Input
+                            id="collegeId"
+                            type="text"
+                            value={collegeId}
+                            onChange={e => { setCollegeId(e.target.value); setError(''); }}
+                            placeholder="Enter your College Roll No / ID"
+                            className="pl-10 h-11 rounded-xl border-border/80 focus-visible:ring-primary/20 bg-background/30 font-sans text-sm"
+                            required
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Personal Email */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="email" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                        Personal Email Address
+                      </Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                        <Input
+                          id="email"
+                          type="email"
+                          value={email}
+                          onChange={e => { setEmail(e.target.value); setError(''); }}
+                          placeholder="name@gmail.com"
+                          className="pl-10 h-11 rounded-xl border-border/80 focus-visible:ring-primary/20 bg-background/30 font-sans text-sm"
+                          autoComplete="email"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Password (for non-verify modes only) */}
+                {mode !== 'verify' && (
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <Label htmlFor="verificationCode" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
-                        6-Digit OTP Code
+                      <Label htmlFor="password" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                        Password
                       </Label>
-                      <button 
-                        type="button" 
-                        onClick={handleResendCode}
-                        className="text-[10px] sm:text-xs text-primary font-semibold hover:underline"
-                        disabled={loading}
-                      >
-                        Resend Code
-                      </button>
+                      {mode === 'signin' && (
+                        <button 
+                          type="button" 
+                          onClick={() => setError("For password resets, please contact the Placement Coordinator.")}
+                          className="text-[10px] sm:text-xs text-primary font-semibold hover:underline"
+                        >
+                          Forgot?
+                        </button>
+                      )}
                     </div>
                     <div className="relative">
                       <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
                       <Input
-                        id="verificationCode"
-                        type="text"
-                        value={verificationCode}
-                        onChange={e => { setVerificationCode(e.target.value); setError(''); }}
-                        placeholder="e.g. 759864"
-                        className="pl-10 h-11 rounded-xl border-border/80 focus-visible:ring-primary/20 bg-background/30 font-sans text-sm font-mono tracking-widest text-center text-lg font-bold"
-                        maxLength={6}
+                        id="password"
+                        type={showPass ? 'text' : 'password'}
+                        value={password}
+                        onChange={e => { setPassword(e.target.value); setError(''); }}
+                        placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
+                        className="pl-10 pr-10 h-11 rounded-xl border-border/80 focus-visible:ring-primary/20 bg-background/30 font-sans text-sm"
+                        autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
                         required
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowPass(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground transition-colors"
+                      >
+                        {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                     </div>
-                  </div>
 
-                  {/* Submit CTA */}
+                    {/* Password strength checklist */}
+                    {mode === 'signup' && (
+                      <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 pt-1.5 px-2.5 py-1.5 bg-muted/20 border rounded-lg border-border/30">
+                        <div className={`w-1.5 h-1.5 rounded-full transition-all ${password.length >= 6 ? 'bg-emerald-500 scale-125 shadow shadow-emerald-500/50' : 'bg-muted-foreground/40'}`} />
+                        <span>Password must contain at least 6 characters</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Submit CTA (for non-verify modes only) */}
+                {mode !== 'verify' && (
                   <Button 
                     type="submit" 
                     className="w-full h-11 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 active:scale-[0.99] transition-all" 
@@ -737,218 +2052,29 @@ export default function AuthPage() {
                     disabled={loading}
                   >
                     {loading ? (
-                      <><Loader2 className="w-4.5 h-4.5 mr-2 animate-spin" /> Verifying...</>
+                      <><Loader2 className="w-4.5 h-4.5 mr-2 animate-spin" /> Authenticating...</>
                     ) : (
-                      'Verify & Sign In'
+                      mode === 'signin' ? 'Sign In' : 'Register Account'
                     )}
                   </Button>
+                )}
+              </form>
+            )}
 
-                  <div className="text-center pt-2">
-                    <button
-                      type="button"
-                      onClick={() => { setMode('signin'); setError(''); setSuccessMsg(''); }}
-                      className="text-xs text-muted-foreground hover:text-foreground font-semibold"
-                    >
-                      Back to Sign In
-                    </button>
-                  </div>
-                </>
-              ) : mode === 'signin' ? (
-                <>
-                  {/* Organization Dropdown */}
-                  {email.trim() !== 'sahilsrivastava8962@gmail.com' && renderOrgSelector('signin')}
-
-                  {/* Email or College ID */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="email" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
-                      {email.trim() === 'sahilsrivastava8962@gmail.com' ? 'Email Address' : 'Email Address or College ID'}
-                    </Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
-                      <Input
-                        id="email"
-                        type="text"
-                        value={email}
-                        onChange={e => { setEmail(e.target.value); setError(''); }}
-                        placeholder={email.trim() === 'sahilsrivastava8962@gmail.com' ? "name@university.edu" : "Email or College ID"}
-                        className="pl-10 h-11 rounded-xl border-border/80 focus-visible:ring-primary/20 bg-background/30 font-sans text-sm"
-                        required
-                      />
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* Organization Dropdown */}
-                  {renderOrgSelector('signup')}
-
-                  {/* Register As Role */}
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
-                      Register As
-                    </Label>
-                    <div className="flex gap-2">
-                      {['student', 'recruiter'].map(r => (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => { setIntendedRole(r as any); setError(''); }}
-                          className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${
-                            intendedRole === r
-                              ? 'border-primary bg-primary/5 text-primary'
-                              : 'border-border/80 bg-background/30 text-muted-foreground hover:text-foreground'
-                          }`}
-                        >
-                          {r.toUpperCase()}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* College ID (Student only) */}
-                  {intendedRole === 'student' && (
-                    <div className="space-y-1.5">
-                      <Label htmlFor="collegeId" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
-                        College ID
-                      </Label>
-                      <div className="relative">
-                        <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
-                        <Input
-                          id="collegeId"
-                          type="text"
-                          value={collegeId}
-                          onChange={e => { setCollegeId(e.target.value); setError(''); }}
-                          placeholder="Enter your College Roll No / ID"
-                          className="pl-10 h-11 rounded-xl border-border/80 focus-visible:ring-primary/20 bg-background/30 font-sans text-sm"
-                          required
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Personal Email */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="email" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
-                      Personal Email Address
-                    </Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
-                      <Input
-                        id="email"
-                        type="email"
-                        value={email}
-                        onChange={e => { setEmail(e.target.value); setError(''); }}
-                        placeholder="name@gmail.com"
-                        className="pl-10 h-11 rounded-xl border-border/80 focus-visible:ring-primary/20 bg-background/30 font-sans text-sm"
-                        autoComplete="email"
-                        required
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Password (for non-verify modes only) */}
-              {mode !== 'verify' && (
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <Label htmlFor="password" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
-                      Password
-                    </Label>
-                    {mode === 'signin' && (
-                      <button 
-                        type="button" 
-                        onClick={() => setError("For password resets, please contact the Placement Coordinator.")}
-                        className="text-[10px] sm:text-xs text-primary font-semibold hover:underline"
-                      >
-                        Forgot?
-                      </button>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
-                    <Input
-                      id="password"
-                      type={showPass ? 'text' : 'password'}
-                      value={password}
-                      onChange={e => { setPassword(e.target.value); setError(''); }}
-                      placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
-                      className="pl-10 pr-10 h-11 rounded-xl border-border/80 focus-visible:ring-primary/20 bg-background/30 font-sans text-sm"
-                      autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPass(v => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground transition-colors"
-                    >
-                      {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-
-                  {/* Password strength checklist */}
-                  {mode === 'signup' && (
-                    <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 pt-1.5 px-2.5 py-1.5 bg-muted/20 border rounded-lg border-border/30">
-                      <div className={`w-1.5 h-1.5 rounded-full transition-all ${password.length >= 6 ? 'bg-emerald-500 scale-125 shadow shadow-emerald-500/50' : 'bg-muted-foreground/40'}`} />
-                      <span>Password must contain at least 6 characters</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Submit CTA (for non-verify modes only) */}
-              {mode !== 'verify' && (
-                <Button 
-                  type="submit" 
-                  className="w-full h-11 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 active:scale-[0.99] transition-all" 
-                  size="lg" 
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <><Loader2 className="w-4.5 h-4.5 mr-2 animate-spin" /> Authenticating...</>
-                  ) : (
-                    mode === 'signin' ? 'Sign In' : 'Register Account'
-                  )}
-                </Button>
-              )}
-            </form>
-
-            {/* Enterprise OAuth dividers */}
-            <div className="space-y-4 pt-3">
-              <div className="relative flex items-center justify-center">
-                <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
-                <span className="relative bg-card px-3.5 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                  Or Connect With
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Button 
-                  type="button"
-                  variant="outline" 
-                  className="h-10 rounded-xl text-xs font-semibold hover:bg-muted/40 border-border bg-background/25 hover:text-foreground hover:shadow-sm"
-                  onClick={() => setError("Federated Sign-In is disabled for security compliance. Sign in using credential schemas.")}
-                >
-                  <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                  </svg>
-                  Google
-                </Button>
-                <Button 
-                  type="button"
-                  variant="outline" 
-                  className="h-10 rounded-xl text-xs font-semibold hover:bg-muted/40 border-border bg-background/25 hover:text-foreground hover:shadow-sm"
-                  onClick={() => setError("Federated Sign-In is disabled for security compliance. Sign in using credential schemas.")}
-                >
-                  <svg className="w-4 h-4 mr-2 fill-current" viewBox="0 0 24 24">
-                    <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
-                  </svg>
-                  GitHub
-                </Button>
-              </div>
+            <div className="text-center pt-4 border-t border-border/40 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusError('');
+                  setStatusResult(null);
+                  setStatusEmail('');
+                  setStatusPassword('');
+                  setShowStatusModal(true);
+                }}
+                className="text-xs text-primary font-bold hover:underline transition-colors"
+              >
+                Check Onboarding Request Status
+              </button>
             </div>
 
           </Card>
@@ -969,6 +2095,210 @@ export default function AuthPage() {
           </div>
         </div>
       </div>
+
+      {showStatusModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in font-sans">
+          <div className="bg-popover border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 relative text-foreground">
+            <button
+              type="button"
+              onClick={() => setShowStatusModal(false)}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground text-lg font-bold"
+            >
+              ✕
+            </button>
+            <h3 className="text-base font-extrabold text-foreground font-heading flex items-center gap-2">
+              <Shield className="w-5 h-5 text-primary" />
+              Check Account Status
+            </h3>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              {statusRole === 'organization'
+                ? 'Enter the primary admin email and password specified during organization request submission.'
+                : `Enter your ${statusRole} account email and password to verify your profile approval status.`}
+            </p>
+
+            {statusError && (
+              <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-xs text-destructive flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>{statusError}</span>
+              </div>
+            )}
+
+            {!statusResult ? (
+              <form onSubmit={handleCheckStatus} className="space-y-3.5">
+                {/* Role Switcher */}
+                <div className="flex bg-muted/35 p-1 rounded-xl border border-border/40 gap-1 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusRole('organization');
+                      setStatusResult(null);
+                      setStatusError('');
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold tracking-wide uppercase transition-all ${
+                      statusRole === 'organization'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Organization
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusRole('student');
+                      setStatusResult(null);
+                      setStatusError('');
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold tracking-wide uppercase transition-all ${
+                      statusRole === 'student'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Student
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStatusRole('recruiter');
+                      setStatusResult(null);
+                      setStatusError('');
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold tracking-wide uppercase transition-all ${
+                      statusRole === 'recruiter'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Recruiter
+                  </button>
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="statusEmail" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                    {statusRole === 'organization' ? 'Admin Email' : 'Account Email'}
+                  </Label>
+                  <Input
+                    id="statusEmail"
+                    type="email"
+                    value={statusEmail}
+                    onChange={e => setStatusEmail(e.target.value)}
+                    placeholder={statusRole === 'organization' ? 'admin@university.edu' : 'your-email@domain.com'}
+                    className="h-10 rounded-xl bg-background/30"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="statusPass" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Password</Label>
+                  <Input
+                    id="statusPass"
+                    type="password"
+                    value={statusPassword}
+                    onChange={e => setStatusPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="h-10 rounded-xl bg-background/30"
+                    required
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={statusLoading}
+                  className="w-full h-10 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20"
+                >
+                  {statusLoading ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Verifying...</>
+                  ) : (
+                    'Check Status'
+                  )}
+                </Button>
+              </form>
+            ) : (
+              <div className="space-y-4 border-t border-border/40 pt-4">
+                <div className="flex justify-between items-center bg-muted/40 p-3 rounded-xl border border-border/30">
+                  <span className="text-xs font-bold text-muted-foreground">Account Status:</span>
+                  <Badge className={`font-semibold text-xs px-2.5 py-0.5 rounded-full uppercase ${
+                    statusResult.status === 'Approved' || statusResult.status === 'Verified' || statusResult.status === 'verified'
+                      ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                      : statusResult.status === 'Rejected' || statusResult.status === 'rejected'
+                        ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                        : statusResult.status === 'Need More Information'
+                          ? 'bg-purple-500/10 text-purple-500 border-purple-500/20 animate-pulse'
+                          : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+                  }`}>
+                    {statusResult.status}
+                  </Badge>
+                </div>
+
+                <div className="text-xs space-y-1.5">
+                  {statusResult.role === 'organization' ? (
+                    <>
+                      <div>Organization: <strong className="text-foreground">{statusResult.organization_name}</strong></div>
+                      <div>Code: <strong className="text-foreground font-mono">{statusResult.generated_org_code}</strong></div>
+                      <div>Submitted: <strong className="text-foreground">{new Date(statusResult.submitted_at).toLocaleString()}</strong></div>
+                    </>
+                  ) : statusResult.role === 'student' ? (
+                    <>
+                      <div>Name: <strong className="text-foreground">{statusResult.name}</strong></div>
+                      <div>College: <strong className="text-foreground">{statusResult.organization_name}</strong></div>
+                      <div>College ID: <strong className="text-foreground font-mono">{statusResult.generated_org_code}</strong></div>
+                      <div>Registered: <strong className="text-foreground">{new Date(statusResult.submitted_at).toLocaleString()}</strong></div>
+                    </>
+                  ) : (
+                    <>
+                      <div>Name: <strong className="text-foreground">{statusResult.name}</strong></div>
+                      <div>College/Organization: <strong className="text-foreground">{statusResult.organization_name}</strong></div>
+                      <div>Company: <strong className="text-foreground">{statusResult.generated_org_code}</strong></div>
+                      <div>Registered: <strong className="text-foreground">{new Date(statusResult.submitted_at).toLocaleString()}</strong></div>
+                    </>
+                  )}
+                </div>
+
+                {statusResult.remarks && (
+                  <div className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/15 text-xs text-purple-650 dark:text-purple-400 space-y-1 leading-relaxed">
+                    <span className="font-bold flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5 text-purple-500" /> Platform Owner Remarks:
+                    </span>
+                    <p className="pl-4.5 text-[11px] text-muted-foreground italic">"{statusResult.remarks}"</p>
+                  </div>
+                )}
+
+                {statusResult.status === 'Need More Information' && (
+                  <Button
+                    type="button"
+                    onClick={() => handleEditResubmissionRequest(statusResult)}
+                    className="w-full h-10 rounded-xl font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-md shadow-purple-500/15"
+                  >
+                    Edit & Resubmit Request
+                  </Button>
+                )}
+
+                {(statusResult.status === 'Approved' || statusResult.status === 'Verified' || statusResult.status === 'verified') && (
+                  <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-semibold text-center flex items-center gap-2 justify-center animate-pulse">
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Your account is active! Please sign in.</span>
+                  </div>
+                )}
+
+                {(statusResult.status === 'Rejected' || statusResult.status === 'rejected') && (
+                  <div className="p-3 bg-red-500/5 border border-red-500/20 rounded-xl text-red-650 dark:text-red-400 text-xs font-semibold text-center flex items-center gap-2 justify-center">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>Your registration request was rejected by administrators.</span>
+                  </div>
+                )}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStatusResult(null)}
+                  className="w-full h-10 rounded-xl font-bold border-border"
+                >
+                  Verify Another Account
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

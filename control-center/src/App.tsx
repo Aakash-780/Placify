@@ -3,7 +3,8 @@ import { createClient } from '@insforge/sdk';
 import { 
   ShieldCheck, Loader2, LogOut, Settings, Activity, AlertCircle, 
   BarChart3, Bell, RefreshCw, X, Plus, Search, Calendar, Building2, 
-  Edit2, Key, Lock, Check, CheckCircle, Sun, Moon
+  Edit2, Key, Lock, Check, CheckCircle, Sun, Moon,
+  Mail, FileText, CheckCircle2, XCircle, AlertTriangle, Globe, Building, Phone, MapPin, User, Clock, ArrowUpRight, LockKeyhole, Info, ExternalLink
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -13,7 +14,17 @@ const insforge = createClient({
     anonKey: import.meta.env.VITE_INSFORGE_ANON_KEY,
 });
 
-type TabType = 'dashboard' | 'organizations' | 'pending_orgs' | 'analytics' | 'logs' | 'settings';
+function decryptPassword(encrypted: string): string {
+    const decoded = atob(encrypted);
+    const key = "placify_key";
+    let result = "";
+    for (let i = 0; i < decoded.length; i++) {
+        result += String.fromCharCode(decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+    }
+    return result;
+}
+
+type TabType = 'dashboard' | 'organizations' | 'pending_orgs' | 'analytics' | 'logs' | 'settings' | 'emails';
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
@@ -54,7 +65,12 @@ export default function App() {
     totalStudentsCount: 0,
     totalRecruitersCount: 0,
     totalJobsCount: 0,
-    totalApplicationsCount: 0
+    totalApplicationsCount: 0,
+    requestsPending: 0,
+    requestsUnderReview: 0,
+    requestsApproved: 0,
+    requestsRejected: 0,
+    requestsNeedMoreInfo: 0
   });
   
   const [organizations, setOrganizations] = useState<any[]>([]);
@@ -66,6 +82,14 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [notifications, setNotifications] = useState<any[]>([]);
+  
+  // Organization Onboarding States
+  const [orgRequests, setOrgRequests] = useState<any[]>([]);
+  const [mockEmails, setMockEmails] = useState<any[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<any>(null);
+  const [showRequestDetail, setShowRequestDetail] = useState(false);
+  const [remarksInput, setRemarksInput] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
   
   // Loading & Toast State
   const [dataLoading, setDataLoading] = useState(false);
@@ -249,17 +273,37 @@ export default function App() {
         .order('created_at', { ascending: false });
       setNotifications(notifData || []);
 
+      // 9. Fetch Onboarding Requests
+      const { data: reqsData } = await insforge.database
+        .from('organization_requests')
+        .select('*')
+        .order('submitted_at', { ascending: false });
+      const requestsList = reqsData || [];
+      setOrgRequests(requestsList);
+
+      // 10. Fetch Mock Email Logs
+      const { data: emailLogsData } = await insforge.database
+        .from('mock_emails')
+        .select('*')
+        .order('sent_at', { ascending: false });
+      setMockEmails(emailLogsData || []);
+
       // Set platform analytics stats
       setStats({
         totalOrganizations: organizationsList.length,
         activeOrganizations: organizationsList.filter(o => o.status === 'Active').length,
         suspendedOrganizations: organizationsList.filter(o => o.status === 'Suspended').length,
-        pendingOnboardings: organizationsList.filter(o => o.status === 'Pending').length,
+        pendingOnboardings: requestsList.filter(r => r.status === 'Pending').length,
         platformHealth: 'Good',
         totalStudentsCount: (stdData || []).length,
         totalRecruitersCount: (recData || []).length,
         totalJobsCount: (jobsData || []).length,
-        totalApplicationsCount: (apps || []).length
+        totalApplicationsCount: (apps || []).length,
+        requestsPending: requestsList.filter(r => r.status === 'Pending').length,
+        requestsUnderReview: requestsList.filter(r => r.status === 'Under Review').length,
+        requestsApproved: requestsList.filter(r => r.status === 'Approved').length,
+        requestsRejected: requestsList.filter(r => r.status === 'Rejected').length,
+        requestsNeedMoreInfo: requestsList.filter(r => r.status === 'Need More Information').length
       });
 
       // Default selected analytics org if not set
@@ -431,39 +475,238 @@ export default function App() {
   }
 
   // Approve Pending Organization Request
-  async function handleApprovePendingOrg(org: any) {
+  async function handleApprovePendingRequest(req: any) {
+    if (!confirm(`Are you sure you want to APPROVE the onboarding request for '${req.organization_name}'?`)) return;
+    setActionLoading(true);
+    let createdOrgId = '';
     try {
-      const { error } = await insforge.database
+      // 1. Decrypt plaintext password
+      const plainPass = decryptPassword(req.temp_password);
+
+      // 2. Insert into organizations
+      const { data: newOrg, error: orgErr } = await insforge.database
         .from('organizations')
-        .update({ status: 'Active' })
-        .eq('id', org.id);
+        .insert([{
+          name: req.organization_name,
+          code: req.generated_org_code,
+          website: req.website || null,
+          address: req.address || null,
+          logo_url: req.logo_url || null,
+          status: 'Active'
+        }])
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (orgErr) throw orgErr;
+      createdOrgId = newOrg.id;
 
-      await writeAuditLog(`Approved onboarding request for: ${org.name}`, org.code);
-      showToast(`Organization '${org.name}' onboarding approved!`);
+      // 3. Provision Admin in Auth
+      let signupUserId = '';
+      const tempClient = createClient({
+        baseUrl: import.meta.env.VITE_INSFORGE_BASE_URL || 'https://39s3r2sh.ap-southeast.insforge.app',
+        anonKey: import.meta.env.VITE_INSFORGE_ANON_KEY,
+        persistSession: false
+      });
+
+      const { data: authData, error: authErr } = await tempClient.auth.signUp({
+        email: req.admin_email,
+        password: plainPass,
+        name: req.admin_name
+      });
+
+      if (authErr) {
+        const errStr = authErr.message || '';
+        if (errStr.toLowerCase().includes('already registered') || errStr.toLowerCase().includes('already exists') || errStr.toLowerCase().includes('unique constraint') || errStr.toLowerCase().includes('duplicate')) {
+          // Retrieve the existing user ID from auth.users via RPC helper
+          const { data: existingUserId, error: rpcErr } = await insforge.database.rpc('get_user_id_by_email', { email_addr: req.admin_email });
+          if (rpcErr || !existingUserId) {
+            throw new Error(`User account already exists, but we failed to retrieve their ID: ${rpcErr?.message || 'Not found'}`);
+          }
+          signupUserId = existingUserId;
+        } else {
+          throw authErr;
+        }
+      } else if (authData?.user?.id) {
+        signupUserId = authData.user.id;
+      } else {
+        throw new Error('User provisioning failed: no user data returned.');
+      }
+
+      // 4. Create or update record in admins
+      const { data: existingAdminRecord } = await insforge.database
+        .from('admins')
+        .select('id')
+        .eq('user_id', signupUserId)
+        .maybeSingle();
+
+      if (existingAdminRecord) {
+        const { error: adminErr } = await insforge.database
+          .from('admins')
+          .update({
+            name: req.admin_name,
+            email: req.admin_email,
+            status: 'Active',
+            role: 'organization_admin',
+            organization_id: createdOrgId,
+            permissions: ['Manage Students', 'Manage Jobs', 'Manage Applications', 'View Analytics']
+          })
+          .eq('id', existingAdminRecord.id);
+        if (adminErr) throw adminErr;
+      } else {
+        const { error: adminErr } = await insforge.database.from('admins').insert([{
+          user_id: signupUserId,
+          name: req.admin_name,
+          email: req.admin_email,
+          status: 'Active',
+          role: 'organization_admin',
+          organization_id: createdOrgId,
+          permissions: ['Manage Students', 'Manage Jobs', 'Manage Applications', 'View Analytics']
+        }]);
+        if (adminErr) throw adminErr;
+      }
+
+      // 4b. Create or update record in organization_admins
+      const { data: existingOrgAdminRecord } = await insforge.database
+        .from('organization_admins')
+        .select('id')
+        .eq('user_id', signupUserId)
+        .maybeSingle();
+
+      if (existingOrgAdminRecord) {
+        const { error: orgAdminErr } = await insforge.database
+          .from('organization_admins')
+          .update({
+            name: req.admin_name,
+            email: req.admin_email,
+            organization_id: createdOrgId,
+            password_hash: req.password_hash,
+            is_active: true
+          })
+          .eq('id', existingOrgAdminRecord.id);
+        if (orgAdminErr) throw orgAdminErr;
+      } else {
+        const { error: orgAdminErr } = await insforge.database.from('organization_admins').insert([{
+          user_id: signupUserId,
+          name: req.admin_name,
+          email: req.admin_email,
+          organization_id: createdOrgId,
+          password_hash: req.password_hash,
+          is_active: true,
+          must_change_password: true
+        }]);
+        if (orgAdminErr) throw orgAdminErr;
+      }
+
+      // 5. Update request status & NULL out credentials for safety
+      const { error: updateErr } = await insforge.database
+        .from('organization_requests')
+        .update({
+          status: 'Approved',
+          temp_password: null,
+          remarks: 'Request approved by Platform Owner.'
+        })
+        .eq('id', req.id);
+
+      if (updateErr) throw updateErr;
+
+      // 6. Write notification logs in mock_emails
+      await insforge.database.from('mock_emails').insert([{
+        sender: 'onboarding@placify.dev',
+        recipient: req.admin_email,
+        subject: `Welcome to Placify! Onboarding Approved for ${req.organization_name}`,
+        body: `Hello ${req.admin_name},\n\nWe are pleased to inform you that the onboarding request for '${req.organization_name}' has been approved by the platform administrators.\n\nYour tenant dashboard is ready at the organization domain. Use the credentials configured during signup to log in.\n\nTenant Code: ${req.generated_org_code}\nAdmin Email: ${req.admin_email}\n\nBest Regards,\nPlacify Onboarding Team`
+      }]);
+
+      await writeAuditLog(`Approved onboarding request for: ${req.organization_name}`, req.generated_org_code);
+      showToast(`Onboarding request for '${req.organization_name}' has been approved successfully!`);
+      setShowRequestDetail(false);
+      setSelectedRequest(null);
       await loadData();
     } catch (err: any) {
-      showToast(err.message || 'Approve request failed.', 'error');
+      console.error('Approve onboarding request failed:', err);
+      // Clean up organization if it was created but user provisioning failed
+      if (createdOrgId) {
+        await insforge.database.from('organizations').delete().eq('id', createdOrgId);
+      }
+      showToast(err.message || 'Onboarding approval failed.', 'error');
+    } finally {
+      setActionLoading(false);
     }
   }
 
-  // Decline/Reject Organization Request
-  async function handleDeclinePendingOrg(org: any) {
-    if (!confirm(`Are you sure you want to DECLINE and DELETE onboarding request for ${org.name}?`)) return;
+  async function handleRejectRequest(req: any) {
+    if (!remarksInput.trim()) {
+      showToast('Please enter remarks specifying the rejection reason.', 'error');
+      return;
+    }
+    if (!confirm(`Are you sure you want to REJECT the onboarding request for '${req.organization_name}'?`)) return;
+    setActionLoading(true);
     try {
       const { error } = await insforge.database
-        .from('organizations')
-        .delete()
-        .eq('id', org.id);
+        .from('organization_requests')
+        .update({
+          status: 'Rejected',
+          remarks: remarksInput.trim(),
+          temp_password: null
+        })
+        .eq('id', req.id);
 
       if (error) throw error;
 
-      await writeAuditLog(`Declined & deleted onboarding request for: ${org.name}`, org.code);
-      showToast('Onboarding request declined.', 'info');
+      await insforge.database.from('mock_emails').insert([{
+        sender: 'onboarding@placify.dev',
+        recipient: req.admin_email,
+        subject: `Onboarding Request Rejected - ${req.organization_name}`,
+        body: `Hello ${req.admin_name},\n\nThank you for your interest in Placify. Unfortunately, your onboarding request for '${req.organization_name}' has been rejected by the platform administrators.\n\nReason/Remarks:\n"${remarksInput.trim()}"\n\nIf you have any questions, you can reply directly to this mail.\n\nBest Regards,\nPlacify Onboarding Team`
+      }]);
+
+      await writeAuditLog(`Rejected onboarding request for: ${req.organization_name}`, req.generated_org_code);
+      showToast(`Onboarding request for '${req.organization_name}' has been rejected.`);
+      setRemarksInput('');
+      setShowRequestDetail(false);
+      setSelectedRequest(null);
       await loadData();
     } catch (err: any) {
-      showToast(err.message || 'Decline request failed.', 'error');
+      showToast(err.message || 'Rejection failed.', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleRequestMoreInfo(req: any) {
+    if (!remarksInput.trim()) {
+      showToast('Please enter remarks specifying the information required.', 'error');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const { error } = await insforge.database
+        .from('organization_requests')
+        .update({
+          status: 'Need More Information',
+          remarks: remarksInput.trim()
+        })
+        .eq('id', req.id);
+
+      if (error) throw error;
+
+      await insforge.database.from('mock_emails').insert([{
+        sender: 'onboarding@placify.dev',
+        recipient: req.admin_email,
+        subject: `Clarification Needed: Onboarding Request for ${req.organization_name}`,
+        body: `Hello ${req.admin_name},\n\nThe platform onboarding team has reviewed your request for '${req.organization_name}' and requires additional details before approval.\n\nRequired Clarification:\n"${remarksInput.trim()}"\n\nPlease log in to the status checking portal using your onboarding admin email and password to edit and resubmit your request.\n\nBest Regards,\nPlacify Onboarding Team`
+      }]);
+
+      await writeAuditLog(`Requested clarification for request: ${req.organization_name}`, req.generated_org_code);
+      showToast('Information request sent to organization successfully.');
+      setRemarksInput('');
+      setShowRequestDetail(false);
+      setSelectedRequest(null);
+      await loadData();
+    } catch (err: any) {
+      showToast(err.message || 'Action failed.', 'error');
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -692,7 +935,7 @@ export default function App() {
       
       {/* Toast Popup */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 p-4 rounded-xl border border-blue-500/20 bg-slate-900/90 text-xs font-semibold flex items-center gap-3 animate-fade-in shadow-xl text-white backdrop-blur-md">
+        <div className="fixed bottom-6 left-6 z-[9999] p-4 rounded-xl border border-blue-500/20 bg-slate-900/90 text-xs font-semibold flex items-center gap-3 animate-fade-in shadow-xl text-white backdrop-blur-md">
           <div className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
           <span>{toast.message}</span>
         </div>
@@ -796,6 +1039,7 @@ export default function App() {
               { id: 'dashboard', label: 'Command Desk', icon: Activity },
               { id: 'organizations', label: 'Organizations', icon: Building2 },
               { id: 'pending_orgs', label: 'Pending Requests', icon: CheckCircle, badge: stats.pendingOnboardings },
+              { id: 'emails', label: 'Email Logs', icon: Mail },
               { id: 'analytics', label: 'Org Analytics', icon: BarChart3 },
               { id: 'logs', label: 'Audit Logs', icon: Settings },
               { id: 'settings', label: 'System Settings', icon: Lock },
@@ -1215,75 +1459,160 @@ export default function App() {
 
         {/* ─── PENDING ORGANIZATION REQUESTS TAB ───────────────────────── */}
         {activeTab === 'pending_orgs' && (
-          <div className="space-y-6 animate-fade-in">
-            <h3 className="text-sm font-bold text-white font-heading flex items-center gap-2">
-              <span>Pending Organization Requests</span>
-              <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-[10px] font-bold">
-                {pendingOrganizationsList.length} Queue
-              </span>
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {pendingOrganizationsList.map(org => {
-                const primaryAdmin = admins.find(a => a.organization_id === org.id);
-                
-                return (
-                  <div key={org.id} className="border border-slate-800 bg-slate-900/30 p-5 rounded-2xl space-y-4 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-3">
-                      <span className="px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-500 text-[9px] font-bold uppercase">
-                        Pending Onboarding
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      {org.logo_url ? (
-                        <img src={org.logo_url} alt="Logo" className="w-10 h-10 rounded-lg object-contain bg-slate-900 border border-slate-850" />
-                      ) : (
-                        <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center font-bold text-blue-400 text-sm font-heading">
-                          {org.name[0]}
-                        </div>
-                      )}
-                      <div>
-                        <h4 className="text-xs font-bold text-white">{org.name}</h4>
-                        <span className="text-[10px] text-slate-400 block font-mono">{org.code}</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400 border-t border-slate-900 pt-3">
-                      <div className="col-span-2">Website: <strong className="text-slate-200">{org.website || 'N/A'}</strong></div>
-                      <div className="col-span-2">Location: <strong className="text-slate-200 truncate block">{org.address || 'N/A'}</strong></div>
-                      {primaryAdmin && (
-                        <>
-                          <div>Admin: <strong className="text-slate-200 block truncate">{primaryAdmin.name}</strong></div>
-                          <div>Email: <strong className="text-slate-200 block truncate font-mono">{primaryAdmin.email}</strong></div>
-                        </>
-                      )}
-                      <div className="col-span-2">Requested: <strong className="text-slate-200">{new Date(org.created_at).toLocaleDateString()}</strong></div>
-                    </div>
-
-                    <div className="flex gap-2 pt-2">
-                      <button
-                        onClick={() => handleApprovePendingOrg(org)}
-                        className="flex-1 h-8 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-all"
-                      >
-                        Approve Onboarding
-                      </button>
-                      <button
-                        onClick={() => handleDeclinePendingOrg(org)}
-                        className="h-8 px-3.5 border border-slate-800 hover:bg-red-500/10 hover:text-red-400 rounded-lg text-xs font-bold text-slate-400 transition-all"
-                      >
-                        Decline
-                      </button>
-                    </div>
+          <div className="space-y-6 animate-fade-in font-sans">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-sm font-bold text-white font-heading">Onboarding Pipeline Control</h3>
+                <p className="text-[10px] text-slate-500 mt-0.5">Manage, review, and provision enterprise tenant onboarding requests.</p>
+              </div>
+              <div className="flex gap-2">
+                {/* Statistics overview */}
+                <div className="flex gap-4 bg-slate-950 px-4 py-2 border border-slate-900 rounded-xl text-center">
+                  <div>
+                    <span className="text-[9px] uppercase tracking-wider text-slate-500 block">Pending</span>
+                    <strong className="text-xs font-bold text-yellow-500">{stats.requestsPending}</strong>
                   </div>
-                );
-              })}
-
-              {pendingOrganizationsList.length === 0 && (
-                <div className="col-span-full border border-slate-900 p-8 rounded-2xl text-center text-xs text-slate-500">
-                  No pending onboarding requests.
+                  <div className="border-l border-slate-900" />
+                  <div>
+                    <span className="text-[9px] uppercase tracking-wider text-slate-500 block">Clarification</span>
+                    <strong className="text-xs font-bold text-purple-500">{stats.requestsNeedMoreInfo}</strong>
+                  </div>
+                  <div className="border-l border-slate-900" />
+                  <div>
+                    <span className="text-[9px] uppercase tracking-wider text-slate-500 block">Approved</span>
+                    <strong className="text-xs font-bold text-emerald-500">{stats.requestsApproved}</strong>
+                  </div>
                 </div>
-              )}
+              </div>
+            </div>
+
+            {/* Table container */}
+            <div className="border border-slate-900 bg-slate-950/40 rounded-2xl overflow-hidden shadow-xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-slate-300">
+                  <thead>
+                    <tr className="border-b border-slate-900 bg-slate-950 text-[10px] uppercase tracking-wider text-slate-400 font-bold select-none">
+                      <th className="p-4">Organization</th>
+                      <th className="p-4">Code</th>
+                      <th className="p-4">Primary Contact</th>
+                      <th className="p-4">Type</th>
+                      <th className="p-4">Submitted</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-900/60 text-xs">
+                    {orgRequests.filter((r: any) => r.status !== 'Approved' && r.status !== 'Rejected').map((req: any) => (
+                      <tr
+                        key={req.id}
+                        onClick={() => {
+                          setSelectedRequest(req);
+                          setRemarksInput(req.remarks || '');
+                          setShowRequestDetail(true);
+                        }}
+                        className="hover:bg-slate-900/40 transition-colors cursor-pointer"
+                      >
+                        <td className="p-4 font-semibold text-white">
+                          <div className="flex items-center gap-2.5">
+                            {req.logo_url ? (
+                              <img src={req.logo_url} alt="Logo" className="w-6 h-6 rounded object-contain bg-slate-900 border border-slate-850" />
+                            ) : (
+                              <div className="w-6 h-6 rounded bg-slate-800 flex items-center justify-center font-bold text-slate-400 text-[10px]">
+                                {req.organization_name[0]}
+                              </div>
+                            )}
+                            <span>{req.organization_name}</span>
+                          </div>
+                        </td>
+                        <td className="p-4 font-mono text-[10px] text-slate-400">{req.generated_org_code}</td>
+                        <td className="p-4">
+                          <div>{req.primary_contact_name || req.admin_name}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">{req.primary_contact_email || req.admin_email}</div>
+                        </td>
+                        <td className="p-4 text-[11px] text-slate-400">{req.organization_type}</td>
+                        <td className="p-4 text-[11px] text-slate-400">{new Date(req.submitted_at).toLocaleDateString()}</td>
+                        <td className="p-4">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                            req.status === 'Approved'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/10'
+                              : req.status === 'Rejected'
+                                ? 'bg-red-500/10 text-red-400 border border-red-500/10'
+                                : req.status === 'Need More Information'
+                                  ? 'bg-purple-500/10 text-purple-400 border border-purple-500/10'
+                                  : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/10'
+                          }`}>
+                            {req.status}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedRequest(req);
+                              setRemarksInput(req.remarks || '');
+                              setShowRequestDetail(true);
+                            }}
+                            className="text-xs text-blue-500 hover:text-blue-400 font-bold transition-colors"
+                          >
+                            Review
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {orgRequests.filter((r: any) => r.status !== 'Approved' && r.status !== 'Rejected').length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-slate-500 text-xs">
+                          No active onboarding requests pending approval.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── EMAIL TRANSACTIONS LOGS TAB ─────────────────────────────── */}
+        {activeTab === 'emails' && (
+          <div className="space-y-6 animate-fade-in font-sans">
+            <div>
+              <h3 className="text-sm font-bold text-white font-heading">Transactional Mail Dispatcher</h3>
+              <p className="text-[10px] text-slate-500 mt-0.5">Audit system notifications generated dynamically by the BaaS server node.</p>
+            </div>
+
+            <div className="border border-slate-900 bg-slate-950/40 rounded-2xl overflow-hidden shadow-xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-slate-300">
+                  <thead>
+                    <tr className="border-b border-slate-900 bg-slate-950 text-[10px] uppercase tracking-wider text-slate-400 font-bold select-none">
+                      <th className="p-4">Sent At</th>
+                      <th className="p-4">Sender</th>
+                      <th className="p-4">Recipient</th>
+                      <th className="p-4">Subject</th>
+                      <th className="p-4">Content</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-900/60 text-xs font-mono">
+                    {mockEmails.map((email: any) => (
+                      <tr key={email.id} className="hover:bg-slate-900/20 transition-colors">
+                        <td className="p-4 text-[10px] text-slate-400 whitespace-nowrap">{new Date(email.sent_at).toLocaleString()}</td>
+                        <td className="p-4 text-slate-500">{email.sender}</td>
+                        <td className="p-4 text-blue-400">{email.recipient}</td>
+                        <td className="p-4 text-slate-200 font-sans font-bold">{email.subject}</td>
+                        <td className="p-4 font-sans text-slate-400 whitespace-pre-wrap max-w-md break-words">{email.body}</td>
+                      </tr>
+                    ))}
+                    {mockEmails.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-slate-500 text-xs font-sans">
+                          No transactional logs recorded in mock_emails mailer.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1694,8 +2023,166 @@ export default function App() {
             </div>
           </div>
         )}
-
       </main>
+
+      {/* ─── ONBOARDING REQUEST DETAIL DRAWER ───────────────────────────── */}
+      {showRequestDetail && selectedRequest && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex justify-end animate-fade-in font-sans">
+          <div className="w-full max-w-2xl bg-slate-950 border-l border-slate-900 h-full flex flex-col shadow-2xl relative animate-slide-in text-slate-300">
+            {/* Header */}
+            <div className="p-6 border-b border-slate-900 flex justify-between items-center bg-slate-900/10">
+              <div className="flex items-center gap-3">
+                {selectedRequest.logo_url ? (
+                  <img src={selectedRequest.logo_url} alt="Logo" className="w-10 h-10 rounded-lg object-contain bg-slate-950 border border-slate-880" />
+                ) : (
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center font-bold text-blue-400 text-sm font-heading">
+                    {selectedRequest.organization_name[0]}
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-sm font-bold text-white font-heading">{selectedRequest.organization_name}</h3>
+                  <span className="text-[10px] text-slate-500 font-mono block uppercase">Code: {selectedRequest.generated_org_code}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowRequestDetail(false);
+                  setSelectedRequest(null);
+                }}
+                className="p-1.5 text-slate-500 hover:text-white rounded-lg transition-colors border border-slate-850 hover:bg-slate-900"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Alert Badge Status */}
+              <div className="flex items-center justify-between p-3.5 bg-slate-900/40 border border-slate-900 rounded-xl">
+                <span className="text-xs font-bold text-slate-400">Current Status:</span>
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  selectedRequest.status === 'Approved'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/10'
+                    : selectedRequest.status === 'Rejected'
+                      ? 'bg-red-500/10 text-red-400 border border-red-500/10'
+                      : selectedRequest.status === 'Need More Information'
+                        ? 'bg-purple-500/10 text-purple-400 border border-purple-500/10'
+                        : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/10'
+                }`}>
+                  {selectedRequest.status}
+                </span>
+              </div>
+
+              {/* Section 1: Org Information */}
+              <div className="space-y-3">
+                <h4 className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-1">
+                  <Building className="w-3.5 h-3.5" /> Organization Information
+                </h4>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>Type: <strong className="text-slate-200">{selectedRequest.organization_type}</strong></div>
+                  <div>Website: {selectedRequest.website ? <a href={selectedRequest.website} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">{selectedRequest.website}</a> : <strong className="text-slate-500">N/A</strong>}</div>
+                  <div>Official Email: <strong className="text-slate-200 font-mono">{selectedRequest.organization_email}</strong></div>
+                  <div>Reg. Number: <strong className="text-slate-200">{selectedRequest.registration_number}</strong></div>
+                  <div>Phone: <strong className="text-slate-200">{selectedRequest.contact_phone || 'N/A'}</strong></div>
+                </div>
+              </div>
+
+              {/* Section 2: Contact & Admin Account */}
+              <div className="space-y-3">
+                <h4 className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-1">
+                  <User className="w-3.5 h-3.5" /> Primary Contact & Admin Account
+                </h4>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>Name: <strong className="text-slate-200">{selectedRequest.primary_contact_name || selectedRequest.admin_name}</strong></div>
+                  <div>Designation: <strong className="text-slate-200">{selectedRequest.primary_contact_designation || 'N/A'}</strong></div>
+                  <div>Official Email: <strong className="text-slate-200 font-mono">{selectedRequest.primary_contact_email || selectedRequest.admin_email}</strong></div>
+                  <div>Phone: <strong className="text-slate-200">{selectedRequest.primary_contact_phone || selectedRequest.admin_phone || 'N/A'}</strong></div>
+                </div>
+              </div>
+
+              {/* Section 3: Documents */}
+              <div className="space-y-3">
+                <h4 className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-1">
+                  <FileText className="w-3.5 h-3.5" /> Verification Documents
+                </h4>
+                <div className="grid grid-cols-2 gap-3.5">
+                  {[
+                    { label: 'Registration Certificate', url: selectedRequest.registration_certificate },
+                    { label: 'GST Registration Certificate', url: selectedRequest.gst_certificate }
+                  ].map((doc, idx) => (
+                    <div key={idx} className="p-3 border border-slate-900 rounded-xl bg-slate-950 flex flex-col gap-1.5 justify-between border-slate-800">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">{doc.label}</span>
+                      {doc.url ? (
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-blue-500 font-bold hover:underline flex items-center gap-1"
+                        >
+                          View Document <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        <span className="text-[10px] text-slate-600 font-semibold italic">N/A</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Remarks Textarea (Rejection / Need More Info Reason) */}
+              {selectedRequest.status !== 'Approved' && (
+                <div className="space-y-2 border-t border-slate-900 pt-5">
+                  <label className="text-[10px] uppercase font-bold text-slate-400 block tracking-wide">
+                    Platform Owner Remarks / Feedback *
+                  </label>
+                  <textarea
+                    value={remarksInput}
+                    onChange={(e) => setRemarksInput(e.target.value)}
+                    placeholder="Enter rejection details or specify clarification required for Need More Information action..."
+                    className="w-full p-3 bg-slate-950 border border-slate-900 rounded-xl text-xs h-20 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                  />
+                  {selectedRequest.remarks && (
+                    <p className="text-[10px] text-purple-400 italic">Previous Remarks: "{selectedRequest.remarks}"</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Sticky Actions Footer */}
+            {selectedRequest.status !== 'Approved' && (
+              <div className="p-6 border-t border-slate-900 bg-slate-900/10 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleApprovePendingRequest(selectedRequest)}
+                  disabled={actionLoading}
+                  className="flex-1 h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                >
+                  {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                  Approve & Provision
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => handleRequestMoreInfo(selectedRequest)}
+                  disabled={actionLoading}
+                  className="h-10 px-4 border border-slate-800 hover:bg-purple-950/20 text-purple-400 rounded-xl text-xs font-bold transition-all"
+                >
+                  Need Info
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleRejectRequest(selectedRequest)}
+                  disabled={actionLoading}
+                  className="h-10 px-4 border border-slate-800 hover:bg-red-950/20 text-red-400 rounded-xl text-xs font-bold transition-all"
+                >
+                  Reject
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ─── CREATE ORGANIZATION MODAL ─────────────────────────────────── */}
       {showCreateOrgModal && (
