@@ -4,7 +4,7 @@ import {
   ShieldCheck, Loader2, LogOut, Settings, Activity, AlertCircle, 
   BarChart3, Bell, RefreshCw, X, Plus, Search, Calendar, Building2, 
   Edit2, Key, Lock, Check, CheckCircle, Sun, Moon,
-  Mail, FileText, CheckCircle2, XCircle, AlertTriangle, Globe, Building, Phone, MapPin, User, Clock, ArrowUpRight, LockKeyhole, Info, ExternalLink
+  Mail, FileText, Building, User, ExternalLink
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -505,7 +505,7 @@ export default function App() {
       const tempClient = createClient({
         baseUrl: import.meta.env.VITE_INSFORGE_BASE_URL || 'https://39s3r2sh.ap-southeast.insforge.app',
         anonKey: import.meta.env.VITE_INSFORGE_ANON_KEY,
-        persistSession: false
+        isServerMode: true
       });
 
       const { data: authData, error: authErr } = await tempClient.auth.signUp({
@@ -906,7 +906,6 @@ export default function App() {
     return matchesSearch;
   });
 
-  const pendingOrganizationsList = filteredOrgs.filter(o => o.status === 'Pending');
   const activeOrgsList = filteredOrgs.filter(o => o.status !== 'Pending');
 
   const filteredAuditLogs = auditLogs.filter(log => {
