@@ -12,10 +12,8 @@ const getBaseUrl = () => {
 const rawClient = createClient({
     baseUrl: getBaseUrl(),
     anonKey: import.meta.env.VITE_INSFORGE_ANON_KEY,
-    // Enable session persistence and automatic token refresh so users stay logged in across page reloads.
-    autoRefreshToken: true,
-    persistSession: true,
 });
+
 
 // Helper to get active organization_id
 export const getActiveOrgId = (): string | null => {

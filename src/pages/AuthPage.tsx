@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { sha256, encryptPassword } from '@/utils/crypto';
+import { RegistrationSuccessModal, type RegistrationRole } from '@/components/ui/RegistrationSuccessModal';
+
 
 const SLIDES = [
   {
@@ -94,6 +96,11 @@ export default function AuthPage() {
   const [generatedCode, setGeneratedCode] = useState('');
   const [isEditingResubmission, setIsEditingResubmission] = useState(false);
   const [resubmitRequestId, setResubmitRequestId] = useState('');
+
+  // Registration Success Modal
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalRole, setSuccessModalRole] = useState<RegistrationRole>('generic');
+  const [successModalEmailVerif, setSuccessModalEmailVerif] = useState(false);
 
 
   const [orgForm, setOrgForm] = useState({
@@ -797,13 +804,11 @@ export default function AuthPage() {
           .update(payload)
           .eq('id', resubmitRequestId);
         if (resubErr) throw resubErr;
-        setSuccessMsg('Onboarding request resubmitted successfully! Platform Owner will review your changes.');
       } else {
         const { error: insertErr } = await insforge.database
           .from('organization_requests')
           .insert([payload]);
         if (insertErr) throw insertErr;
-        setSuccessMsg('Onboarding request submitted successfully! Your credentials will be active after approval.');
       }
 
       localStorage.removeItem('placify_onboarding_draft');
@@ -822,10 +827,11 @@ export default function AuthPage() {
         acercCertUrl: '', gstCertUrl: '', certifyCorrect: false, agreeTerms: false, agreePrivacy: false
       });
 
-      setTimeout(() => {
-        setMode('signin');
-        setSuccessMsg('');
-      }, 5000);
+      // Show success modal instead of auto-redirecting
+      setSuccessModalRole('organization');
+      setSuccessModalEmailVerif(false);
+      setShowSuccessModal(true);
+
     } catch (err: any) {
       let friendlyError = err.message || 'Onboarding submission failed. Please verify inputs and try again.';
       if (typeof friendlyError === 'string') {
@@ -1071,11 +1077,15 @@ export default function AuthPage() {
         }
 
         if (signUpData?.requireEmailVerification) {
-          setSuccessMsg('Account created! Please check your email for the 6-digit verification code.');
-          setMode('verify');
+          // Show modal with email-verification note — user should not be logged in automatically
+          setSuccessModalRole(intendedRole as RegistrationRole);
+          setSuccessModalEmailVerif(true);
+          setShowSuccessModal(true);
         } else {
-          setSuccessMsg('Account created successfully! Please sign in.');
-          setMode('signin');
+          // Show modal without verification note
+          setSuccessModalRole(intendedRole as RegistrationRole);
+          setSuccessModalEmailVerif(false);
+          setShowSuccessModal(true);
         }
       }
     } catch (err: any) {
@@ -1733,6 +1743,21 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen bg-background flex select-none overflow-hidden relative font-body transition-colors duration-300">
+
+      {/* Registration Success Modal — shown after any signup flow completes */}
+      <RegistrationSuccessModal
+        isOpen={showSuccessModal}
+        role={successModalRole}
+        requiresEmailVerification={successModalEmailVerif}
+        onClose={() => {
+          setShowSuccessModal(false);
+          setMode('signin');
+        }}
+        onGoToMain={() => {
+          setShowSuccessModal(false);
+          navigate('/');
+        }}
+      />
 
       {/* LEFT COLUMN (Visual Panel - Desktop Only) */}
       <div className="hidden lg:flex flex-col justify-between w-1/2 bg-slate-50 dark:bg-slate-950 border-r border-border/60 relative p-12 text-foreground dark:text-white overflow-hidden select-none transition-colors duration-300">

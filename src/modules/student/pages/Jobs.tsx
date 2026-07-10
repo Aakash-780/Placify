@@ -714,7 +714,7 @@ export default function Jobs() {
                                                                 outerRadius={56}
                                                                 paddingAngle={hasData ? 3 : 0}
                                                                 dataKey="value"
-                                                                onClick={(data) => {
+                                                                onClick={(data: any) => {
                                                                     if (hasData && data && data.status) {
                                                                         setStatusFilter(data.status);
                                                                     }
