@@ -21,7 +21,8 @@ export default defineConfig({
             if (cookies) {
               proxyRes.headers['set-cookie'] = cookies.map((cookie: string) => {
                 return cookie
-                  .replace(/\bSecure\b;?/gi, '')
+                  .replace(/;\s*Domain=[^;]+/gi, '')
+                  .replace(/\bSecure\b;?\s*/gi, '')
                   .replace(/\bSameSite=None\b/gi, 'SameSite=Lax');
               });
             }
@@ -39,7 +40,8 @@ export default defineConfig({
             if (cookies) {
               proxyRes.headers['set-cookie'] = cookies.map((cookie: string) => {
                 return cookie
-                  .replace(/\bSecure\b;?/gi, '')
+                  .replace(/;\s*Domain=[^;]+/gi, '')
+                  .replace(/\bSecure\b;?\s*/gi, '')
                   .replace(/\bSameSite=None\b/gi, 'SameSite=Lax');
               });
             }

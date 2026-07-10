@@ -4,21 +4,22 @@ import './lib/apiMock';
 import './styles/index.css';
 import App from './App.tsx';
 
-// Clear old localStorage keys to prevent "Failed to fetch" from old backends
+// Clear stale localStorage keys only (not cookies) when the backend URL changes.
+// This prevents "Failed to fetch" from old backends without destroying valid sessions.
 const currentBaseUrl = import.meta.env.VITE_INSFORGE_BASE_URL;
 const savedBaseUrl = localStorage.getItem('insforge_last_base_url');
 if (savedBaseUrl !== currentBaseUrl) {
   for (let i = localStorage.length - 1; i >= 0; i--) {
     const key = localStorage.key(i);
-    if (key && (key.includes('insforge') || key.includes('sb-') || key.includes('supabase') || key.includes('clerk'))) {
+    // Only clear SDK-internal keys — do NOT clear placify_session_active or placify_organization_id
+    if (key && (key.startsWith('sb-') || key.startsWith('supabase') || key.startsWith('clerk'))) {
       localStorage.removeItem(key);
     }
   }
   localStorage.setItem('insforge_last_base_url', currentBaseUrl || '');
-  // Clear cookies
-  document.cookie.split(";").forEach(function(c) { 
-    document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date(0).toUTCString() + ";path=/"); 
-  });
+  // NOTE: Do NOT clear cookies here. Clearing cookies destroys the httpOnly
+  // refresh cookie that the SDK uses to restore sessions after page reloads.
+  // The Vite proxy Domain-stripping fix handles cookie compatibility for localhost.
 }
 
 const rootElement = document.getElementById('root');

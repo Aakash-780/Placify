@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
+import {
   Mail, Lock, Eye, EyeOff, Loader2, ArrowLeft, Sparkles, Search,
   CheckCircle, ArrowRight, BookOpen, GraduationCap, Cpu, ShieldCheck, AlertCircle, Sun, Moon,
   Building2, Upload, Globe, ChevronLeft, ChevronRight, Check, AlertTriangle, FileText, Download, ShieldAlert, BadgeCheck, Building, Shield
@@ -70,6 +70,7 @@ const SLIDES = [
 
 export default function AuthPage() {
   const navigate = useNavigate();
+  const rightColRef = useRef<HTMLDivElement>(null);
   const { theme, resolvedTheme, setTheme } = useTheme();
   const [mode, setMode] = useState<'signin' | 'signup' | 'verify'>('signin');
   const [email, setEmail] = useState('');
@@ -93,7 +94,8 @@ export default function AuthPage() {
   const [generatedCode, setGeneratedCode] = useState('');
   const [isEditingResubmission, setIsEditingResubmission] = useState(false);
   const [resubmitRequestId, setResubmitRequestId] = useState('');
-  
+
+
   const [orgForm, setOrgForm] = useState({
     // Section 1: Org Info
     name: '',
@@ -201,6 +203,13 @@ export default function AuthPage() {
     }
   }, [orgForm, generatedCode, onboardingStep, intendedRole]);
 
+  // Scroll right column to top when error is set to make sure it is visible
+  useEffect(() => {
+    if (error && rightColRef.current) {
+      rightColRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [error]);
+
   // Hashing and domain validation helpers
   const validatePassword = (pass: string) => {
     if (pass.length < 8) return "Password must be at least 8 characters long.";
@@ -212,10 +221,7 @@ export default function AuthPage() {
   };
 
   const validateOfficialEmail = (emailStr: string) => {
-    const genericDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'zoho.com', 'mail.com', 'yandex.com', 'protonmail.com'];
-    const domain = emailStr.trim().split('@')[1]?.toLowerCase();
-    if (!domain) return false;
-    return !genericDomains.includes(domain);
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr.trim());
   };
 
   const handleOrgNameBlur = () => {
@@ -321,11 +327,17 @@ export default function AuthPage() {
       clearInterval(progressInterval);
       if (error) throw error;
 
-      const fileUrl = insforge.storage.from(bucket).getPublicUrl(storagePath);
+      const urlResult = insforge.storage.from(bucket).getPublicUrl(storagePath);
+      // getPublicUrl returns { data: { publicUrl: string } } — extract the string
+      const fileUrl: string =
+        (urlResult as any)?.data?.publicUrl ||
+        (urlResult as any)?.publicUrl ||
+        (urlResult as any)?.data?.url ||
+        String(urlResult);
 
       setUploadProgress(prev => ({ ...prev, [field]: 100 }));
       setOrgForm(prev => ({ ...prev, [field]: fileUrl }));
-      
+
       if (field === 'logo') {
         setOrgForm(prev => ({ ...prev, logoUrl: fileUrl }));
       }
@@ -456,7 +468,7 @@ export default function AuthPage() {
       setStatusError(err.message || 'Status check failed.');
       try {
         await insforge.auth.signOut();
-      } catch {}
+      } catch { }
     } finally {
       setStatusLoading(false);
     }
@@ -561,7 +573,7 @@ export default function AuthPage() {
           return;
         }
         const data = await response.json();
-        
+
         // Cache the result
         searchCacheRef.current[trimmedQuery] = data;
         setSearchResults(data);
@@ -640,17 +652,17 @@ export default function AuthPage() {
       return;
     }
 
-    if (!orgForm.name.trim() || !orgForm.email.trim() || !orgForm.logoUrl || !orgForm.contactEmail.trim() || !orgForm.contactName.trim()) {
+    if (!orgForm.name.trim() || !orgForm.email.trim() || !orgForm.phone.trim() || !orgForm.logoUrl || !orgForm.contactEmail.trim() || !orgForm.contactName.trim()) {
       setError('All required fields must be populated.');
       return;
     }
 
     if (!validateOfficialEmail(orgForm.email)) {
-      setError('Organization email must use an official domain (free webmail like Gmail/Yahoo is not allowed).');
+      setError('Please enter a valid organization email address.');
       return;
     }
     if (!validateOfficialEmail(orgForm.contactEmail)) {
-      setError('Official contact email must use an official domain (free webmail like Gmail/Yahoo is not allowed).');
+      setError('Please enter a valid primary contact email address.');
       return;
     }
 
@@ -809,7 +821,7 @@ export default function AuthPage() {
         placementCellPhone: '', expectedCompanies: '', regCertUrl: '', govApprUrl: '',
         acercCertUrl: '', gstCertUrl: '', certifyCorrect: false, agreeTerms: false, agreePrivacy: false
       });
-      
+
       setTimeout(() => {
         setMode('signin');
         setSuccessMsg('');
@@ -846,10 +858,6 @@ export default function AuthPage() {
         return;
       }
     } else if (mode === 'signin') {
-      if (!selectedOrgId && email.trim() !== 'sahilsrivastava8962@gmail.com') {
-        setError('Please select an Organization.');
-        return;
-      }
       if (!email.trim() || !password.trim()) {
         setError('Please enter your credentials.');
         return;
@@ -901,11 +909,42 @@ export default function AuthPage() {
           return;
         }
 
-        // Standard user login: Lookup organization first
+        // CRITICAL: Clear any stale organization_id from a previous session BEFORE
+        // queries run so the databaseProxy doesn't inject a wrong org filter.
+        localStorage.removeItem('placify_organization_id');
+
+        // Resolve the organization for this email/college_id using a SECURITY DEFINER
+        // RPC function. Direct table queries (admins/recruiters/students) are blocked by
+        // RLS for unauthenticated users — auth.uid() is null pre-login — so they always
+        // return empty. The RPC function runs with elevated DB privileges and bypasses RLS.
+        const { data: orgMatches, error: orgLookupErr } = await insforge.database.rpc(
+          'resolve_user_org_by_email',
+          { p_email: resolvedEmail }
+        );
+
+        console.log('[AUTH DEBUG] resolve_user_org_by_email RPC result:', {
+          email: resolvedEmail,
+          orgMatches,
+          orgLookupErr,
+        });
+
+        if (orgLookupErr) throw orgLookupErr;
+
+        if (orgMatches && orgMatches.length > 0) {
+          orgId = orgMatches[0].organization_id;
+        }
+
+        if (!orgId) {
+          setError('No account found for this email address or College ID. Please check your credentials or contact your administrator.');
+          setLoading(false);
+          return;
+        }
+
+        // Check if organization is suspended
         const { data: org, error: orgErr } = await insforge.database
           .from('organizations')
           .select('*')
-          .eq('id', selectedOrgId)
+          .eq('id', orgId)
           .maybeSingle();
 
         if (orgErr || !org) {
@@ -1111,13 +1150,12 @@ export default function AuthPage() {
                       key={org.id}
                       onClick={() => selectOrg(org)}
                       onMouseEnter={() => setActiveIndex(index)}
-                      className={`px-4 py-2 text-xs font-semibold cursor-pointer transition-all ${
-                        isSelected 
-                          ? 'bg-primary/20 text-primary' 
-                          : isActive 
-                            ? 'bg-muted/60 text-foreground' 
-                            : 'text-muted-foreground hover:text-foreground'
-                      }`}
+                      className={`px-4 py-2 text-xs font-semibold cursor-pointer transition-all ${isSelected
+                        ? 'bg-primary/20 text-primary'
+                        : isActive
+                          ? 'bg-muted/60 text-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                        }`}
                     >
                       <div className="flex justify-between items-center">
                         <span>{org.name}</span>
@@ -1143,7 +1181,7 @@ export default function AuthPage() {
   const handleNextStep = () => {
     setError('');
     if (onboardingStep === 1) {
-      if (!orgForm.name.trim() || !orgForm.email.trim()) {
+      if (!orgForm.name.trim() || !orgForm.email.trim() || !orgForm.phone.trim()) {
         setError('Please populate all required organization fields.');
         return;
       }
@@ -1152,7 +1190,7 @@ export default function AuthPage() {
         return;
       }
       if (!validateOfficialEmail(orgForm.email)) {
-        setError('Organization email must be on an official corporate/educational domain.');
+        setError('Please enter a valid organization email address.');
         return;
       }
       if (!generatedCode) {
@@ -1166,7 +1204,7 @@ export default function AuthPage() {
         return;
       }
       if (!validateOfficialEmail(orgForm.contactEmail)) {
-        setError('Official email must be on an official domain.');
+        setError('Please enter a valid official email address.');
         return;
       }
       if (!isEditingResubmission) {
@@ -1215,7 +1253,7 @@ export default function AuthPage() {
         {/* Stepper */}
         <div className="relative flex items-center justify-between px-2">
           <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-muted -translate-y-1/2 z-0" />
-          <div 
+          <div
             className="absolute top-1/2 left-0 h-0.5 bg-primary -translate-y-1/2 z-0 transition-all duration-300"
             style={{ width: `${((onboardingStep - 1) / 3) * 100}%` }}
           />
@@ -1225,13 +1263,12 @@ export default function AuthPage() {
               type="button"
               disabled={step.num > onboardingStep && !isEditingResubmission}
               onClick={() => { setError(''); setOnboardingStep(step.num); }}
-              className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all border ${
-                onboardingStep === step.num
-                  ? 'bg-primary text-primary-foreground border-primary scale-110 shadow-md shadow-primary/15'
-                  : onboardingStep > step.num
-                    ? 'bg-background text-primary border-primary'
-                    : 'bg-muted text-muted-foreground border-border'
-              }`}
+              className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all border ${onboardingStep === step.num
+                ? 'bg-primary text-primary-foreground border-primary scale-110 shadow-md shadow-primary/15'
+                : onboardingStep > step.num
+                  ? 'bg-background text-primary border-primary'
+                  : 'bg-muted text-muted-foreground border-border'
+                }`}
             >
               {step.num}
             </button>
@@ -1300,21 +1337,31 @@ export default function AuthPage() {
               </div>
 
               <div className="space-y-1.5 col-span-2 sm:col-span-1">
-                <Label htmlFor="orgPhone" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Phone Number</Label>
-                <Input
-                  id="orgPhone"
-                  value={orgForm.phone}
-                  onChange={e => setOrgForm({ ...orgForm, phone: e.target.value })}
-                  placeholder="+91 9876543210"
-                  className="h-10 rounded-xl bg-background/30"
-                />
+                <Label htmlFor="orgPhone" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Phone Number *</Label>
+                <div className="flex h-10 rounded-xl overflow-hidden border border-input bg-background/30 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-0">
+                  <span className="flex items-center px-3 text-xs font-bold text-muted-foreground bg-muted/40 border-r border-input select-none whitespace-nowrap">+91</span>
+                  <input
+                    id="orgPhone"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    value={orgForm.phone}
+                    onChange={e => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setOrgForm({ ...orgForm, phone: val });
+                    }}
+                    placeholder="9876543210"
+                    className="flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground/50"
+                    required
+                  />
+                </div>
               </div>
 
 
 
               {/* Unique Generated Code and Logo Upload */}
               <div className="space-y-1.5 col-span-2 border-t border-border/40 pt-4 mt-2">
-                <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground block">Tenant Code (Auto-Generated)</Label>
+                <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground block">Organization Code (Auto-Generated)</Label>
                 <div className="flex gap-2 items-center">
                   <Input
                     value={generatedCode || 'Provide name to generate code...'}
@@ -1338,8 +1385,13 @@ export default function AuthPage() {
                 <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Organization Logo *</Label>
                 <div className="flex items-center gap-4">
                   {orgForm.logoUrl ? (
-                    <div className="relative group border rounded-xl overflow-hidden bg-slate-900 w-16 h-16 border-border">
-                      <img src={orgForm.logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                    <div className="relative group border rounded-xl overflow-hidden w-16 h-16 border-border bg-white">
+                      <img
+                        src={orgForm.logoUrl}
+                        alt="Logo"
+                        className="w-full h-full object-contain p-1"
+                        onError={e => { (e.target as HTMLImageElement).src = ''; }}
+                      />
                       <button
                         type="button"
                         onClick={() => setOrgForm({ ...orgForm, logoUrl: '', logo: '' } as any)}
@@ -1440,14 +1492,23 @@ export default function AuthPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="contactPhone" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Phone Number *</Label>
-              <Input
-                id="contactPhone"
-                value={orgForm.contactPhone}
-                onChange={e => setOrgForm({ ...orgForm, contactPhone: e.target.value })}
-                placeholder="+91 9000000001"
-                className="h-10 rounded-xl bg-background/30"
-                required
-              />
+              <div className="flex h-10 rounded-xl overflow-hidden border border-input bg-background/30 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-0">
+                <span className="flex items-center px-3 text-xs font-bold text-muted-foreground bg-muted/40 border-r border-input select-none whitespace-nowrap">+91</span>
+                <input
+                  id="contactPhone"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={orgForm.contactPhone}
+                  onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    setOrgForm({ ...orgForm, contactPhone: val });
+                  }}
+                  placeholder="9000000001"
+                  className="flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground/50"
+                  required
+                />
+              </div>
             </div>
 
             {!isEditingResubmission && (
@@ -1467,8 +1528,8 @@ export default function AuthPage() {
                     <div className="text-[9px] text-muted-foreground leading-tight space-y-1 bg-muted/20 border border-border/30 rounded-lg p-2 mt-1">
                       <div className="font-bold text-slate-500 uppercase">Enterprise Policy:</div>
                       <div className="flex items-center gap-1.5">
-                        <div className={`w-1.5 h-1.5 rounded-full ${orgForm.adminPassword.length >= 8 ? 'bg-emerald-500' : 'bg-muted-foreground/30'}`} />
-                        <span>Min. 8 characters</span>
+                        <div className={`w-1.5 h-1.5 rounded-full ${orgForm.adminPassword.length >= 6 ? 'bg-emerald-500' : 'bg-muted-foreground/30'}`} />
+                        <span>Min. 6 characters</span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <div className={`w-1.5 h-1.5 rounded-full ${/[A-Z]/.test(orgForm.adminPassword) ? 'bg-emerald-500' : 'bg-muted-foreground/30'}`} />
@@ -1672,10 +1733,10 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen bg-background flex select-none overflow-hidden relative font-body transition-colors duration-300">
-      
+
       {/* LEFT COLUMN (Visual Panel - Desktop Only) */}
       <div className="hidden lg:flex flex-col justify-between w-1/2 bg-slate-50 dark:bg-slate-950 border-r border-border/60 relative p-12 text-foreground dark:text-white overflow-hidden select-none transition-colors duration-300">
-        
+
         {/* Ambient Grid Pattern */}
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#00000003_1px,transparent_1px),linear-gradient(to_bottom,#00000003_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none" />
         <div className="absolute -top-40 -left-40 w-96 h-96 bg-primary/5 dark:bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
@@ -1687,9 +1748,19 @@ export default function AuthPage() {
             <PlacifyLogo iconClassName="text-foreground dark:text-white w-9 h-9" textClassName="h-6" />
           </Link>
           <Badge className="bg-primary/10 dark:bg-primary/20 text-primary border-primary/20 dark:border-primary/30 font-semibold px-3 py-1 rounded-full text-xs">
-            Ecosystem v1.0
+            Ecosystem w1.0
           </Badge>
         </div>
+
+        {error && (
+          <div className="relative z-10 mt-6 p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-xs text-destructive flex items-start gap-2.5 animate-scale-in max-w-md mx-auto w-full shadow-md bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400">
+            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <div className="space-y-1">
+              <span className="font-extrabold uppercase text-[9px] tracking-wider text-red-700 dark:text-red-300 block">System Alert / Error</span>
+              <p className="font-medium text-xs leading-normal">{error}</p>
+            </div>
+          </div>
+        )}
 
         {/* Mid Carousel Slider */}
         <div className="relative z-10 max-w-md mx-auto my-auto space-y-8 flex flex-col justify-center">
@@ -1730,14 +1801,17 @@ export default function AuthPage() {
       </div>
 
       {/* RIGHT COLUMN (Form Panel - Mobile & Desktop) */}
-      <div className="w-full lg:w-1/2 min-h-screen bg-background/50 flex flex-col justify-between p-6 sm:p-8 md:p-12 relative z-10 transition-colors duration-300">
+      <div 
+        ref={rightColRef}
+        className="w-full lg:w-1/2 h-screen overflow-y-auto bg-background/50 flex flex-col justify-between p-6 sm:p-8 md:p-12 relative z-10 transition-colors duration-300"
+      >
         {/* Background mesh decoration in right column */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-80 h-80 bg-primary/5 rounded-full blur-[100px] pointer-events-none animate-pulse" />
 
         {/* Floating Back Button & Theme Toggle */}
         <div className="flex justify-between items-center w-full">
-          <Link 
-            to="/" 
+          <Link
+            to="/"
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-all duration-200 py-1.5 px-3.5 rounded-full border bg-card/80 backdrop-blur-sm shadow-sm hover:shadow group"
           >
             <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
@@ -1770,11 +1844,11 @@ export default function AuthPage() {
                 {mode === 'signin' ? 'Sign In to Portal' : mode === 'signup' ? 'Register Account' : 'Verify Email'}
               </h1>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                {mode === 'signin' 
-                  ? 'Access your analytics dashboards and placement listings.' 
+                {mode === 'signin'
+                  ? 'Access your analytics dashboards and placement listings.'
                   : mode === 'signup'
-                  ? 'Configure credentials to kick off your student preparing journey.'
-                  : 'Enter the 6-digit OTP code sent to your registered email address.'}
+                    ? 'Configure credentials to kick off your student preparing journey.'
+                    : 'Enter the 6-digit OTP code sent to your registered email address.'}
               </p>
             </div>
 
@@ -1784,22 +1858,20 @@ export default function AuthPage() {
                 <button
                   type="button"
                   onClick={() => { setMode('signin'); setError(''); setSuccessMsg(''); }}
-                  className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all duration-200 ${
-                    mode === 'signin' 
-                      ? 'bg-background shadow text-foreground' 
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
+                  className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all duration-200 ${mode === 'signin'
+                    ? 'bg-background shadow text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                    }`}
                 >
                   Sign In
                 </button>
                 <button
                   type="button"
                   onClick={() => { setMode('signup'); setError(''); setSuccessMsg(''); }}
-                  className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all duration-200 ${
-                    mode === 'signup' 
-                      ? 'bg-background shadow text-foreground' 
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
+                  className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all duration-200 ${mode === 'signup'
+                    ? 'bg-background shadow text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                    }`}
                 >
                   Sign Up
                 </button>
@@ -1852,8 +1924,8 @@ export default function AuthPage() {
                         <Label htmlFor="verificationCode" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
                           6-Digit OTP Code
                         </Label>
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           onClick={handleResendCode}
                           className="text-[10px] sm:text-xs text-primary font-semibold hover:underline"
                           disabled={loading}
@@ -1877,10 +1949,10 @@ export default function AuthPage() {
                     </div>
 
                     {/* Submit CTA */}
-                    <Button 
-                      type="submit" 
-                      className="w-full h-11 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 active:scale-[0.99] transition-all" 
-                      size="lg" 
+                    <Button
+                      type="submit"
+                      className="w-full h-11 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 active:scale-[0.99] transition-all"
+                      size="lg"
                       disabled={loading}
                     >
                       {loading ? (
@@ -1903,8 +1975,6 @@ export default function AuthPage() {
                 ) : mode === 'signin' ? (
                   <>
                     {/* Organization Dropdown */}
-                    {email.trim() !== 'sahilsrivastava8962@gmail.com' && renderOrgSelector('signin')}
-
                     {/* Email or College ID */}
                     <div className="space-y-1.5">
                       <Label htmlFor="email" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
@@ -1940,11 +2010,10 @@ export default function AuthPage() {
                             key={r}
                             type="button"
                             onClick={() => { setIntendedRole(r as any); setError(''); }}
-                            className={`flex-1 py-2.5 text-[10px] sm:text-xs font-extrabold rounded-xl border transition-all uppercase tracking-wider ${
-                              intendedRole === r
-                                ? 'border-primary bg-primary/5 text-primary shadow-sm shadow-primary/5'
-                                : 'border-border/85 bg-background/30 text-muted-foreground hover:text-foreground'
-                            }`}
+                            className={`flex-1 py-2.5 text-[10px] sm:text-xs font-extrabold rounded-xl border transition-all uppercase tracking-wider ${intendedRole === r
+                              ? 'border-primary bg-primary/5 text-primary shadow-sm shadow-primary/5'
+                              : 'border-border/85 bg-background/30 text-muted-foreground hover:text-foreground'
+                              }`}
                           >
                             {r}
                           </button>
@@ -2003,8 +2072,8 @@ export default function AuthPage() {
                         Password
                       </Label>
                       {mode === 'signin' && (
-                        <button 
-                          type="button" 
+                        <button
+                          type="button"
                           onClick={() => setError("For password resets, please contact the Placement Coordinator.")}
                           className="text-[10px] sm:text-xs text-primary font-semibold hover:underline"
                         >
@@ -2045,10 +2114,10 @@ export default function AuthPage() {
 
                 {/* Submit CTA (for non-verify modes only) */}
                 {mode !== 'verify' && (
-                  <Button 
-                    type="submit" 
-                    className="w-full h-11 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 active:scale-[0.99] transition-all" 
-                    size="lg" 
+                  <Button
+                    type="submit"
+                    className="w-full h-11 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 active:scale-[0.99] transition-all"
+                    size="lg"
                     disabled={loading}
                   >
                     {loading ? (
@@ -2134,11 +2203,10 @@ export default function AuthPage() {
                       setStatusResult(null);
                       setStatusError('');
                     }}
-                    className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold tracking-wide uppercase transition-all ${
-                      statusRole === 'organization'
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold tracking-wide uppercase transition-all ${statusRole === 'organization'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                      }`}
                   >
                     Organization
                   </button>
@@ -2149,11 +2217,10 @@ export default function AuthPage() {
                       setStatusResult(null);
                       setStatusError('');
                     }}
-                    className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold tracking-wide uppercase transition-all ${
-                      statusRole === 'student'
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold tracking-wide uppercase transition-all ${statusRole === 'student'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                      }`}
                   >
                     Student
                   </button>
@@ -2164,11 +2231,10 @@ export default function AuthPage() {
                       setStatusResult(null);
                       setStatusError('');
                     }}
-                    className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold tracking-wide uppercase transition-all ${
-                      statusRole === 'recruiter'
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold tracking-wide uppercase transition-all ${statusRole === 'recruiter'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                      }`}
                   >
                     Recruiter
                   </button>
@@ -2216,15 +2282,14 @@ export default function AuthPage() {
               <div className="space-y-4 border-t border-border/40 pt-4">
                 <div className="flex justify-between items-center bg-muted/40 p-3 rounded-xl border border-border/30">
                   <span className="text-xs font-bold text-muted-foreground">Account Status:</span>
-                  <Badge className={`font-semibold text-xs px-2.5 py-0.5 rounded-full uppercase ${
-                    statusResult.status === 'Approved' || statusResult.status === 'Verified' || statusResult.status === 'verified'
-                      ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                      : statusResult.status === 'Rejected' || statusResult.status === 'rejected'
-                        ? 'bg-red-500/10 text-red-500 border-red-500/20'
-                        : statusResult.status === 'Need More Information'
-                          ? 'bg-purple-500/10 text-purple-500 border-purple-500/20 animate-pulse'
-                          : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
-                  }`}>
+                  <Badge className={`font-semibold text-xs px-2.5 py-0.5 rounded-full uppercase ${statusResult.status === 'Approved' || statusResult.status === 'Verified' || statusResult.status === 'verified'
+                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                    : statusResult.status === 'Rejected' || statusResult.status === 'rejected'
+                      ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                      : statusResult.status === 'Need More Information'
+                        ? 'bg-purple-500/10 text-purple-500 border-purple-500/20 animate-pulse'
+                        : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+                    }`}>
                     {statusResult.status}
                   </Badge>
                 </div>
