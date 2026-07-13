@@ -186,7 +186,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
                             ? "Welcome to organization admin control dashboard"
                             : role === 'admin'
                             ? "Welcome to organization subadmin control dashboard"
-                            : `Welcome back${user?.profile?.name ? `, ${user.profile.name}` : ''}`
+                            : "Welcome back to the student dashboard, explore the job opportunities for you!"
                         }
                     </p>
                 </div>
