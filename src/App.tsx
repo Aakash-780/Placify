@@ -6,17 +6,20 @@ import { RoleProvider } from '@/context/RoleContext';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import AppRoutes from '@/routes/AppRoutes';
+import MaintenanceGuard from '@/components/guards/MaintenanceGuard';
 
 export default function App() {
     return (
         <ThemeProvider>
             <InsforgeProvider client={insforge}>
                 <TooltipProvider>
-                    <RoleProvider>
-                        <BrowserRouter>
-                            <AppRoutes />
-                        </BrowserRouter>
-                    </RoleProvider>
+                    <MaintenanceGuard>
+                        <RoleProvider>
+                            <BrowserRouter>
+                                <AppRoutes />
+                            </BrowserRouter>
+                        </RoleProvider>
+                    </MaintenanceGuard>
                 </TooltipProvider>
             </InsforgeProvider>
         </ThemeProvider>

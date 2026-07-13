@@ -20,6 +20,7 @@ import {
     DropdownMenuItem, DropdownMenuSeparator 
 } from '@/components/ui/dropdown-menu';
 import { checkJobEligibility } from '@/utils/checkJobEligibility';
+import SubadminFeatureToggle from '@/components/SubadminFeatureToggle';
 import { getYearDisplay } from '@/constants/years';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 
@@ -109,7 +110,7 @@ export default function Jobs() {
                     .from('jobs')
                     .select('*, job_documents(*)');
 
-                if (role === 'admin') {
+                if (role === 'admin' || role === 'organization_admin') {
                     // Admin sees all jobs unfiltered
                 }
                 // students see all active jobs (filtered client-side below)
@@ -338,12 +339,15 @@ export default function Jobs() {
                             <h1 className="text-3xl font-heading font-bold text-foreground tracking-tight">On-Campus Jobs</h1>
                             <p className="text-muted-foreground mt-1 text-sm">Monitor, publish, edit, draft, archive, and manage placement opportunity listings.</p>
                         </div>
-                        <Button 
-                            onClick={() => navigate('/admin/post-job')} 
-                            className="sm:w-auto self-start bg-primary text-primary-foreground hover:bg-primary/95 flex items-center gap-2 font-bold rounded-xl"
-                        >
-                            <Plus className="w-4 h-4" /> Post Opportunity
-                        </Button>
+                        <div className="flex items-center gap-3">
+                            <SubadminFeatureToggle featureKey="jobs" />
+                            <Button 
+                                onClick={() => navigate('/admin/post-job')} 
+                                className="sm:w-auto self-start bg-primary text-primary-foreground hover:bg-primary/95 flex items-center gap-2 font-bold rounded-xl"
+                            >
+                                <Plus className="w-4 h-4" /> Post Opportunity
+                            </Button>
+                        </div>
                     </div>
                     {/* Summary Row */}
                     <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground bg-muted/20 border border-border/10 rounded-xl p-3 px-4">
@@ -375,7 +379,7 @@ export default function Jobs() {
                         onClick={() => setStatusFilter('active')}
                         className={cn(
                             "text-left p-3.5 rounded-xl border transition-all duration-200 bg-card hover:bg-muted/40 shadow-sm",
-                            statusFilter === 'active' ? "ring-2 ring-primary border-transparent" : "border-border/50"
+                            statusFilter === 'active' ? "border-primary bg-primary/[0.03] shadow-md shadow-primary/5" : "border-border/60"
                         )}
                     >
                         <div className="flex justify-between items-start">
@@ -398,7 +402,7 @@ export default function Jobs() {
                         onClick={() => setStatusFilter('draft')}
                         className={cn(
                             "text-left p-3.5 rounded-xl border transition-all duration-200 bg-card hover:bg-muted/40 shadow-sm",
-                            statusFilter === 'draft' ? "ring-2 ring-primary border-transparent" : "border-border/50"
+                            statusFilter === 'draft' ? "border-primary bg-primary/[0.03] shadow-md shadow-primary/5" : "border-border/60"
                         )}
                     >
                         <div className="flex justify-between items-start">
@@ -416,7 +420,7 @@ export default function Jobs() {
                         onClick={() => setStatusFilter('archived')}
                         className={cn(
                             "text-left p-3.5 rounded-xl border transition-all duration-200 bg-card hover:bg-muted/40 shadow-sm",
-                            statusFilter === 'archived' ? "ring-2 ring-primary border-transparent" : "border-border/50"
+                            statusFilter === 'archived' ? "border-primary bg-primary/[0.03] shadow-md shadow-primary/5" : "border-border/60"
                         )}
                     >
                         <div className="flex justify-between items-start">
@@ -434,7 +438,7 @@ export default function Jobs() {
                         onClick={() => setStatusFilter('all')}
                         className={cn(
                             "text-left p-3.5 rounded-xl border transition-all duration-200 bg-card hover:bg-muted/40 shadow-sm",
-                            statusFilter === 'all' ? "ring-2 ring-primary border-transparent" : "border-border/50"
+                            statusFilter === 'all' ? "border-primary bg-primary/[0.03] shadow-md shadow-primary/5" : "border-border/60"
                         )}
                     >
                         <div className="flex justify-between items-start">
@@ -1191,7 +1195,7 @@ export default function Jobs() {
 
     return (
         <div className="space-y-6 animate-fade-in">
-            {role === 'admin' ? renderAdminDashboard() : renderStudentView()}
+            {(role === 'admin' || role === 'organization_admin') ? renderAdminDashboard() : renderStudentView()}
 
             {/* Admin Delete Confirmation Dialog */}
             <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

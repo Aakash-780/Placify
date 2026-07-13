@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2, Building2, BookOpen, ShieldCheck, CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import SubadminFeatureToggle from '@/components/SubadminFeatureToggle';
 
 export default function AdminDsaSheets() {
     const { role } = useRole();
@@ -206,7 +207,7 @@ export default function AdminDsaSheets() {
         }
     }
 
-    if (role !== 'admin') {
+    if (role !== 'admin' && role !== 'organization_admin') {
         return <div className="p-8 text-center text-destructive">Unauthorized: Admin access required</div>;
     }
 
@@ -217,6 +218,7 @@ export default function AdminDsaSheets() {
                     <h1 className="text-3xl font-heading font-bold">Manage DSA Sheets</h1>
                     <p className="text-muted-foreground mt-1">Add or remove test preparation companies and coding questions.</p>
                 </div>
+                <SubadminFeatureToggle featureKey="dsa" />
             </div>
 
             <div className="grid md:grid-cols-3 gap-6">

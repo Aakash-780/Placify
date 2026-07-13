@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
+import SubadminFeatureToggle from '@/components/SubadminFeatureToggle';
 
 type PageTabType = 'verification' | 'partners';
 
@@ -166,6 +167,7 @@ export default function OrgRecruitersPage() {
         </div>
 
         <div className="flex items-center gap-4">
+          <SubadminFeatureToggle featureKey="recruiters" />
           <button
             onClick={loadData}
             disabled={loading}

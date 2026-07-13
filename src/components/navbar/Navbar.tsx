@@ -25,7 +25,7 @@ interface NavbarProps {
 export default function Navbar({ onMenuClick }: NavbarProps) {
     const navigate = useNavigate();
     const { user } = useUser();
-    const { roleData } = useRole();
+    const { role, roleData } = useRole();
     const { theme, resolvedTheme, setTheme } = useTheme();
 
     const [notifications, setNotifications] = useState<any[]>([]);
@@ -182,7 +182,12 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
                 </Button>
                 <div>
                     <p className="text-sm text-muted-foreground">
-                        Welcome back{user?.profile?.name ? `, ${user.profile.name}` : ''}
+                        {role === 'organization_admin'
+                            ? "Welcome to organization admin control dashboard"
+                            : role === 'admin'
+                            ? "Welcome to organization subadmin control dashboard"
+                            : `Welcome back${user?.profile?.name ? `, ${user.profile.name}` : ''}`
+                        }
                     </p>
                 </div>
             </div>

@@ -726,7 +726,7 @@ export default function ForumThread() {
 
     async function deleteThread() {
         if (!thread || !roleData?.id) return;
-        const isUserAdmin = role === 'admin';
+        const isUserAdmin = role === 'admin' || role === 'organization_admin';
         if (!isUserAdmin && thread.author_id !== roleData.id) return;
         
         if (!confirm("Are you sure you want to permanently delete this thread?\n\nThis action cannot be undone.")) return;
@@ -785,7 +785,7 @@ export default function ForumThread() {
     }
 
     async function togglePin() {
-        if (!thread || role !== 'admin') return;
+        if (!thread || (role !== 'admin' && role !== 'organization_admin')) return;
         const nextPinned = !thread.is_pinned;
         await insforge.database.from('discussion_threads').update({ is_pinned: nextPinned }).eq('id', thread.id);
         setThread((prev: any) => ({ ...prev, is_pinned: nextPinned }));
@@ -976,7 +976,7 @@ export default function ForumThread() {
     if (loading) return <div className="space-y-4 animate-pulse"><div className="h-8 bg-muted rounded w-1/3" /><div className="h-64 bg-muted rounded-lg" /></div>;
     if (!thread) return <div className="text-center py-20"><p>Thread not found</p><Button variant="ghost" className="mt-4" onClick={() => navigate('/forum')}>Back to Forum</Button></div>;
 
-    const isUserAdmin = role === 'admin';
+    const isUserAdmin = role === 'admin' || role === 'organization_admin';
     const showThreadIdentity = !thread.is_anonymous || isUserAdmin;
 
     const rawThreadAuthor = authors[thread.author_id] || {

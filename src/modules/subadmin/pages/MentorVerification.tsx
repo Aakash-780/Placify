@@ -12,6 +12,7 @@ import {
     Building2, Linkedin, GraduationCap, Calendar, MessageSquare, AlertCircle, Search, DollarSign,
     Mail, CheckCircle2, Eye, ZoomIn, ZoomOut, RotateCcw, Maximize, Minimize, Download
 } from 'lucide-react';
+import SubadminFeatureToggle from '@/components/SubadminFeatureToggle';
 
 export default function MentorVerification() {
     const { roleData } = useRole();
@@ -285,6 +286,7 @@ export default function MentorVerification() {
                         Verify student/alumni mentor credentials, review uploaded joining letters or IDs, and manage onboarding status.
                     </p>
                 </div>
+                <SubadminFeatureToggle featureKey="mentor" />
             </div>
 
             {/* Verification Stats */}

@@ -25,16 +25,8 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
         return <>{children}</>;
     }
 
-    // Platform Owner, Organization Admin, and SubAdmin skip onboarding and verification
-    if (role === 'PLATFORM_OWNER' || role === 'organization_admin' || role === 'admin') {
-        if (currentPath === '/select-role' || currentPath === '/awaiting-approval' || currentPath === '/verification-rejected') {
-            return <Navigate to="/dashboard" replace />;
-        }
-        return <>{children}</>;
-    }
-
-    // Suspended check
-    if (accountStatus === 'Suspended') {
+    // Suspended check (applies to organization users, not the Platform Owner)
+    if (accountStatus === 'Suspended' && role !== 'PLATFORM_OWNER') {
         return (
             <div className="min-h-screen flex items-center justify-center p-4 bg-[#030712] text-white font-body select-none">
                 <div className="max-w-md w-full border border-slate-800 bg-slate-900/60 backdrop-blur-xl p-8 rounded-2xl text-center space-y-6">
@@ -61,6 +53,17 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
                 </div>
             </div>
         );
+    }
+
+    // Platform Owner, Organization Admin, and SubAdmin skip onboarding and verification
+    if (role === 'PLATFORM_OWNER' || role === 'organization_admin' || role === 'admin') {
+        if (currentPath === '/select-role' || currentPath === '/awaiting-approval' || currentPath === '/verification-rejected') {
+            return <Navigate to="/dashboard" replace />;
+        }
+
+        // SubAdmin feature block check is handled in-place inside SubAdminLayout.tsx to avoid redirecting the user
+
+        return <>{children}</>;
     }
 
     const normStatus = verificationStatus?.toLowerCase() || 'pending';

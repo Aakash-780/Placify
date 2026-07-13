@@ -16,6 +16,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import SubadminFeatureToggle from '@/components/SubadminFeatureToggle';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 
 // Polymorphic author helper to batch query students, admins, and recruiters
@@ -455,7 +456,7 @@ export default function OffCampusManagement() {
         }
     };
 
-    if (role !== 'admin') {
+    if (role !== 'admin' && role !== 'organization_admin') {
         return (
             <div className="p-8 text-center space-y-4">
                 <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
@@ -538,17 +539,20 @@ export default function OffCampusManagement() {
                         <h1 className="text-3xl font-heading font-bold text-foreground tracking-tight">Off-Campus Job Management</h1>
                         <p className="text-muted-foreground mt-1 text-sm">Monitor, review, approve and manage community-submitted opportunities.</p>
                     </div>
-                    <Button 
-                        onClick={() => {
-                            setEditingJob(null);
-                            setForm(initialForm);
-                            setErrors({});
-                            setIsOpen(true);
-                        }} 
-                        className="sm:w-auto self-start bg-primary text-primary-foreground hover:bg-primary/95 flex items-center gap-2"
-                    >
-                        <Plus className="w-4 h-4" /> Post Opportunity
-                    </Button>
+                    <div className="flex items-center gap-3">
+                        <SubadminFeatureToggle featureKey="off_campus" />
+                        <Button 
+                            onClick={() => {
+                                setEditingJob(null);
+                                setForm(initialForm);
+                                setErrors({});
+                                setIsOpen(true);
+                            }} 
+                            className="sm:w-auto self-start bg-primary text-primary-foreground hover:bg-primary/95 flex items-center gap-2"
+                        >
+                            <Plus className="w-4 h-4" /> Post Opportunity
+                        </Button>
+                    </div>
                 </div>
                 {/* Summary Row */}
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground bg-muted/20 border border-border/10 rounded-xl p-3 px-4">
@@ -575,7 +579,7 @@ export default function OffCampusManagement() {
                     onClick={() => setStatusFilter('approved')}
                     className={cn(
                         "text-left p-3.5 rounded-xl border transition-all duration-200 bg-card hover:bg-muted/40 shadow-sm",
-                        statusFilter === 'approved' ? "ring-2 ring-primary border-transparent" : "border-border/50"
+                        statusFilter === 'approved' ? "border-primary bg-primary/[0.03] shadow-md shadow-primary/5" : "border-border/60"
                     )}
                 >
                     <div className="flex justify-between items-start">
@@ -598,7 +602,7 @@ export default function OffCampusManagement() {
                     onClick={() => setStatusFilter('pending')}
                     className={cn(
                         "text-left p-3.5 rounded-xl border transition-all duration-200 bg-card hover:bg-muted/40 shadow-sm",
-                        statusFilter === 'pending' ? "ring-2 ring-primary border-transparent" : "border-border/50"
+                        statusFilter === 'pending' ? "border-primary bg-primary/[0.03] shadow-md shadow-primary/5" : "border-border/60"
                     )}
                 >
                     <div className="flex justify-between items-start">
@@ -621,7 +625,7 @@ export default function OffCampusManagement() {
                     onClick={() => setStatusFilter('rejected')}
                     className={cn(
                         "text-left p-3.5 rounded-xl border transition-all duration-200 bg-card hover:bg-muted/40 shadow-sm",
-                        statusFilter === 'rejected' ? "ring-2 ring-primary border-transparent" : "border-border/50"
+                        statusFilter === 'rejected' ? "border-primary bg-primary/[0.03] shadow-md shadow-primary/5" : "border-border/60"
                     )}
                 >
                     <div className="flex justify-between items-start">
@@ -644,7 +648,7 @@ export default function OffCampusManagement() {
                     onClick={() => setStatusFilter('all')}
                     className={cn(
                         "text-left p-3.5 rounded-xl border transition-all duration-200 bg-card hover:bg-muted/40 shadow-sm",
-                        statusFilter === 'all' ? "ring-2 ring-primary border-transparent" : "border-border/50"
+                        statusFilter === 'all' ? "border-primary bg-primary/[0.03] shadow-md shadow-primary/5" : "border-border/60"
                     )}
                 >
                     <div className="flex justify-between items-start">

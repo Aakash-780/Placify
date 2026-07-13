@@ -18,6 +18,7 @@ export default function OrgSettingsPage() {
   const [website, setWebsite] = useState('');
   const [address, setAddress] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
+  const [disabledFeatures, setDisabledFeatures] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -38,6 +39,7 @@ export default function OrgSettingsPage() {
         setWebsite(data.website || '');
         setAddress(data.address || '');
         setLogoUrl(data.logo_url || '');
+        setDisabledFeatures(data.disabled_features || []);
       }
     } catch (err: any) {
       console.error('Error loading org details:', err);
@@ -67,7 +69,8 @@ export default function OrgSettingsPage() {
           name: name.trim(),
           website: website.trim() || null,
           address: address.trim() || null,
-          logo_url: logoUrl.trim() || null
+          logo_url: logoUrl.trim() || null,
+          disabled_features: disabledFeatures
         })
         .eq('id', currentOrgId);
 
@@ -186,6 +189,58 @@ export default function OrgSettingsPage() {
                   <img src={logoUrl} alt="Logo Preview" className="h-12 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 </div>
               )}
+            </div>
+
+            {/* Features Control Card */}
+            <div className="border border-border/60 rounded-xl p-4 bg-muted/5 space-y-4">
+              <div>
+                <h4 className="text-xs font-bold text-foreground">SubAdmin Feature Permissions</h4>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  Enable or disable specific features for subadmin coordinators. Toggling a feature off restricts subadmins immediately.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {[
+                  { key: 'students', label: 'Students Management', desc: 'Verify, suspend, or update student profiles' },
+                  { key: 'recruiters', label: 'Recruiters Management', desc: 'Approve, verify, or suspend employer accounts' },
+                  { key: 'jobs', label: 'Job Posting & Details', desc: 'Create, modify, and delete job postings' },
+                  { key: 'applications', label: 'Applications Portal', desc: 'Manage applicant reviews and selections' },
+                  { key: 'analytics', label: 'Analytics Dashboard', desc: 'View placement stats and metrics' },
+                  { key: 'community', label: 'Community & Forums', desc: 'Oversee community forum threads & comments' },
+                  { key: 'dsa', label: 'DSA Sheets Management', desc: 'Publish and coordinate DSA sheet curriculum' },
+                  { key: 'mentor', label: 'Mentor Verification', desc: 'Verify and approve alumni mentor profiles' }
+                ].map((feat) => {
+                  const isEnabled = !disabledFeatures.includes(feat.key);
+                  return (
+                    <div key={feat.key} className="flex items-center justify-between p-3 rounded-lg border border-border bg-card hover:bg-muted/10 transition-colors">
+                      <div className="pr-2">
+                        <span className="text-[11px] font-bold text-foreground block">{feat.label}</span>
+                        <span className="text-[9px] text-muted-foreground block mt-0.5 leading-tight">{feat.desc}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDisabledFeatures(prev =>
+                            prev.includes(feat.key)
+                              ? prev.filter(k => k !== feat.key)
+                              : [...prev, feat.key]
+                          );
+                        }}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 focus:outline-none ${
+                          isEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                            isEnabled ? 'translate-x-4.5' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {errorMsg && (

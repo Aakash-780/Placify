@@ -6,7 +6,8 @@ import OrgAdminFooter from '@/components/layout/OrgAdminFooter';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Shield, GraduationCap, Building2, Settings,
-  ChevronLeft, ChevronRight, MapPin
+  ChevronLeft, ChevronRight, MapPin, Briefcase, Users, Sparkles, 
+  ExternalLink, BookMarked, MessageSquare, UserCheck
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -15,6 +16,13 @@ const organizationAdminNav = [
   { to: '/organization-admin/subadmins', icon: Shield, label: 'SubAdmins' },
   { to: '/organization-admin/students', icon: GraduationCap, label: 'Students' },
   { to: '/organization-admin/recruiters', icon: Building2, label: 'Recruiters' },
+  { to: '/jobs', icon: Briefcase, label: 'Jobs' },
+  { to: '/admin/applicants', icon: Users, label: 'Applications' },
+  { to: '/student-explorer', icon: Sparkles, label: 'AI Explorer' },
+  { to: '/admin/off-campus', icon: ExternalLink, label: 'Manage Off-Campus Job' },
+  { to: '/admin/manage-dsa', icon: BookMarked, label: 'DSA Sheets' },
+  { to: '/forum', icon: MessageSquare, label: 'Community Forum' },
+  { to: '/admin/mentor-verification', icon: UserCheck, label: 'Mentor Verification' },
   { to: '/organization-admin/settings', icon: Settings, label: 'Settings' },
 ];
 
@@ -115,11 +123,11 @@ export default function OrganizationAdminLayout() {
                   to={item.to}
                   onClick={() => setMobileOpen(false)}
                   className={cn(
-                    'flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all duration-200 group relative overflow-hidden border',
+                    'flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all duration-200 group relative overflow-hidden',
                     collapsed && 'justify-center px-2',
                     active
-                      ? 'bg-primary/10 text-primary border-primary/20'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground border-transparent'
+                      ? 'border border-primary/80 bg-primary/[0.08] text-primary shadow-sm shadow-primary/5'
+                      : 'border-0 text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
                 >
                   {/* Active top-shine */}
@@ -163,7 +171,9 @@ export default function OrganizationAdminLayout() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Navbar onMenuClick={() => setMobileOpen(true)} />
         <main className="flex-1 overflow-y-auto bg-background">
-          <Outlet />
+          <div className="p-4 lg:p-8 max-w-[1400px] mx-auto min-h-[calc(100vh-4rem-200px)]">
+            <Outlet />
+          </div>
           <OrgAdminFooter />
         </main>
       </div>

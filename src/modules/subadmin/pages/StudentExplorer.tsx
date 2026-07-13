@@ -18,6 +18,7 @@ import {
     Brain, Code2, Zap, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import SubadminFeatureToggle from '@/components/SubadminFeatureToggle';
 
 interface Student {
     id: string;
@@ -195,7 +196,7 @@ function parseNaturalLanguageQuery(query: string): { filters: AIFilters; matched
 export default function StudentExplorer() {
     const { role } = useRole();
 
-    if (role !== 'admin') {
+    if (role !== 'admin' && role !== 'organization_admin') {
         return (
             <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-4">
                 <AlertCircle className="w-12 h-12 text-muted-foreground" />
@@ -594,6 +595,9 @@ Return ONLY this exact JSON format (no other text):
                     <div className="absolute bottom-4 left-16 w-24 h-24 rounded-full bg-white blur-2xl" />
                 </div>
                 <div className="relative">
+                    <div className="flex justify-end mb-2">
+                        <SubadminFeatureToggle featureKey="ai_explorer" />
+                    </div>
                     <div className="flex items-center gap-2 mb-2">
                         <Brain className="w-6 h-6" />
                         <span className="text-sm font-medium text-white/80 uppercase tracking-wider">AI-Powered</span>

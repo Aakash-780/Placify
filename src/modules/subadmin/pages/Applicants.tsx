@@ -18,6 +18,7 @@ import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import SubadminFeatureToggle from '@/components/SubadminFeatureToggle';
 import {
     Users, Search, ChevronDown, Eye, CheckCircle, XCircle,
     Clock, FileText, Mail, Briefcase, ZoomIn, ZoomOut, RotateCcw,
@@ -644,9 +645,12 @@ export default function Applicants() {
 
     return (
         <div className="space-y-6 animate-fade-in">
-            <div>
-                <h1 className="text-3xl font-heading font-bold">Applicants</h1> 
-                <p className="text-muted-foreground mt-1">Manage applications for your job postings</p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-heading font-bold">Applicants</h1> 
+                    <p className="text-muted-foreground mt-1">Manage applications for your job postings</p>
+                </div>
+                <SubadminFeatureToggle featureKey="applications" />
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">

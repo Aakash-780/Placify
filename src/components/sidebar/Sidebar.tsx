@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import PlacifyLogo from '@/components/ui/PlacifyLogo';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MapPin, Lock } from 'lucide-react';
 import { useRole } from '@/context/RoleContext';
 
 interface NavItem {
@@ -12,6 +12,7 @@ interface NavItem {
     icon: React.ComponentType<any>;
     label: string;
     badgeCount?: number;
+    isLocked?: boolean;
 }
 
 interface SidebarProps {
@@ -129,12 +130,15 @@ export default function Sidebar({
                                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative',
                                 collapsed && 'justify-center px-2',
                                 isActive
-                                    ? 'bg-primary/10 text-primary shadow-sm'
-                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                    ? 'border border-primary/80 bg-primary/[0.08] text-primary shadow-sm shadow-primary/5'
+                                    : 'border-0 text-muted-foreground hover:bg-muted hover:text-foreground'
                             )}
                         >
                             <item.icon className={cn('w-5 h-5 flex-shrink-0 transition-colors', collapsed && 'w-5 h-5')} />
                             {!collapsed && <span className="flex-grow text-left">{item.label}</span>}
+                            {item.isLocked && (
+                                <Lock className={cn("w-3.5 h-3.5 text-muted-foreground/60 flex-shrink-0", collapsed ? "absolute top-1.5 right-1.5" : "ml-2")} />
+                            )}
                             {item.badgeCount !== undefined && item.badgeCount > 0 && (
                                 collapsed ? (
                                     <span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5">

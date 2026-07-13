@@ -31,6 +31,7 @@ const initialForm = {
 export default function OffCampus() {
     const navigate = useNavigate();
     const { role, roleData } = useRole();
+    const isAdmin = role === 'admin' || role === 'organization_admin';
     const { user } = useUser();
     const [jobs, setJobs] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -66,9 +67,9 @@ export default function OffCampus() {
             let query = insforge.database.from('off_campus_jobs').select('*');
 
             // If recruiter or student, fetch approved jobs + their own listings
-            if (role !== 'admin' && roleData?.id) {
+            if (!isAdmin && roleData?.id) {
                 query = query.or(`status.eq.approved,created_by.eq.${roleData.id}`);
-            } else if (role !== 'admin') {
+            } else if (!isAdmin) {
                 query = query.eq('status', 'approved');
             }
             // Admins can query everything (no filter needed)
@@ -84,8 +85,10 @@ export default function OffCampus() {
     };
 
     useEffect(() => {
-        fetchJobs();
-    }, [role, roleData?.id]);
+        if (roleData?.id) {
+            fetchJobs();
+        }
+    }, [role, roleData]);
 
     const validateJob = (data: typeof initialForm) => {
         const errs: Record<string, string> = {};
@@ -142,15 +145,15 @@ export default function OffCampus() {
                 description: form.description,
                 created_by: roleData.id,
                 created_by_role: role,
-                status: role === 'admin' ? 'approved' : 'pending',
-                approved_by_admin: role === 'admin'
+                status: isAdmin ? 'approved' : 'pending',
+                approved_by_admin: isAdmin
             };
-            if (role !== 'admin') {
+            if (!isAdmin) {
                 payload.rejection_reason = null;
             }
 
             if (editingJob) {
-                if (role !== 'admin' && editingJob.status !== 'pending' && editingJob.status !== 'rejected') {
+                if (!isAdmin && editingJob.status !== 'pending' && editingJob.status !== 'rejected') {
                     alert("This opportunity has already been approved and can no longer be modified.");
                     throw new Error('Approved listings cannot be edited');
                 }
@@ -161,7 +164,7 @@ export default function OffCampus() {
 
                 if (error) throw error;
 
-                if (role !== 'admin' && editingJob.status === 'rejected') {
+                if (!isAdmin && editingJob.status === 'rejected') {
                     // Send resubmission notification
                     await insforge.database.from('notifications').insert({
                         user_id: roleData.id,
@@ -176,7 +179,7 @@ export default function OffCampus() {
                     .insert([payload]);
 
                 if (error) throw error;
-                alert(role === 'admin' ? 'Opportunity posted successfully.' : 'Opportunity submitted successfully. It will be visible once approved by an Admin.');
+                alert(isAdmin ? 'Opportunity posted successfully.' : 'Opportunity submitted successfully. It will be visible once approved by an Admin.');
             }
 
             setIsOpen(false);
@@ -194,7 +197,7 @@ export default function OffCampus() {
 
     const handleDelete = async (jobId: string) => {
         const job = jobs.find(j => j.id === jobId);
-        if (job && role !== 'admin' && job.status !== 'pending') {
+        if (job && !isAdmin && job.status !== 'pending') {
             alert("Approved or rejected opportunities cannot be deleted.");
             throw new Error('Approved listings cannot be deleted');
         }
@@ -352,7 +355,7 @@ export default function OffCampus() {
                     >
                         Active Openings
                     </button>
-                    {role === 'admin' ? (
+                    {isAdmin ? (
                         <button
                             onClick={() => navigate('/admin/off-campus')}
                             className={cn(
@@ -387,7 +390,7 @@ export default function OffCampus() {
                         onChange={e => setSearch(e.target.value)}
                     />
                 </div>
-                {role === 'admin' && activeTab === 'admin' && (
+                {isAdmin && activeTab === 'admin' && (
                     <Select value={statusFilter} onValueChange={(val: any) => setStatusFilter(val)}>
                         <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filter Status" /></SelectTrigger>
                         <SelectContent>
@@ -404,7 +407,7 @@ export default function OffCampus() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {[1, 2, 3, 4].map(i => <Card key={i} className="h-36 animate-pulse bg-muted/50" />)}
                 </div>
-            ) : activeTab === 'admin' && role === 'admin' ? (
+            ) : activeTab === 'admin' && isAdmin ? (
                 // Admin Management List
                 filteredAdminListings.length === 0 ? (
                     <Card><CardContent className="p-12 text-center"><Briefcase className="w-12 h-12 mx-auto text-muted-foreground mb-3" /><p>No submissions found.</p></CardContent></Card>
@@ -417,7 +420,7 @@ export default function OffCampus() {
                                         <div className="flex items-center gap-2 flex-wrap">
                                             <h3 className="font-heading font-bold text-lg text-foreground">{job.title}</h3>
                                             <Badge variant={job.job_type === 'internship' ? 'warning' : 'secondary'} className="capitalize">{job.job_type || 'Job'}</Badge>
-                                            {job.created_by_role === 'admin' && (
+                                            {(job.created_by_role === 'admin' || job.created_by_role === 'organization_admin') && (
                                                 <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-semibold py-0.5">
                                                     ✓ Official
                                                 </Badge>
@@ -508,7 +511,7 @@ export default function OffCampus() {
                                             </div>
                                             <div className="flex flex-col items-end gap-1.5">
                                                 <Badge variant={job.job_type === 'internship' ? 'warning' : 'secondary'} className="capitalize">{job.job_type || 'Job'}</Badge>
-                                                {job.created_by_role === 'admin' && (
+                                                {(job.created_by_role === 'admin' || job.created_by_role === 'organization_admin') && (
                                                     <Badge className="bg-primary/10 text-primary border-primary/20 text-[9px] py-0.5 px-1.5 font-semibold">
                                                         ✓ Official
                                                     </Badge>
@@ -566,10 +569,10 @@ export default function OffCampus() {
                                             </Button>
                                         )}
 
-                                        {(role === 'admin' || (roleData?.id && job.created_by === roleData.id && (job.status === 'pending' || job.status === 'rejected'))) && (
+                                        {(isAdmin || (roleData?.id && job.created_by === roleData.id && (job.status === 'pending' || job.status === 'rejected'))) && (
                                             <div className="flex gap-2 pt-2 border-t border-border/10">
                                                 <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => {
-                                                    if (role !== 'admin' && job.status !== 'pending' && job.status !== 'rejected') {
+                                                    if (!isAdmin && job.status !== 'pending' && job.status !== 'rejected') {
                                                         alert("This opportunity has already been approved and can no longer be modified.");
                                                         return;
                                                     }
@@ -590,7 +593,7 @@ export default function OffCampus() {
                                                 }}>
                                                     <Edit className="w-3.5 h-3.5 mr-1" />Edit
                                                 </Button>
-                                                {role === 'admin' || job.status === 'pending' ? (
+                                                {isAdmin || job.status === 'pending' ? (
                                                     <Button size="sm" variant="destructive" className="flex-1 text-xs" onClick={() => handleDelete(job.id)}>
                                                         <Trash2 className="w-3.5 h-3.5 mr-1" />Delete
                                                     </Button>

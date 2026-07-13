@@ -24,7 +24,7 @@ export function RecruiterRoute({ children }: RouteProps) {
 export function AdminRoute({ children }: RouteProps) {
     const { role, loading } = useRole();
     if (loading) return <LoadingScreen />;
-    if (role !== 'admin') return <Navigate to="/dashboard" replace />;
+    if (role !== 'admin' && role !== 'organization_admin') return <Navigate to="/dashboard" replace />;
     return <>{children}</>;
 }
 

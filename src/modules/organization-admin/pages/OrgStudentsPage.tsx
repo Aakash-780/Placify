@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import SubadminFeatureToggle from '@/components/SubadminFeatureToggle';
 
 type PageTabType = 'verification' | 'cohort';
 
@@ -225,6 +226,7 @@ export default function OrgStudentsPage() {
         </div>
 
         <div className="flex items-center gap-4">
+          <SubadminFeatureToggle featureKey="students" />
           <button
             onClick={loadData}
             disabled={loading}

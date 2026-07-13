@@ -15,9 +15,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
     MessageSquare, Plus, Eye, Clock, Pin,
-    Search, ArrowRight, Trash2, Building2, Flag
+    Search, ArrowRight, Trash2, Building2, Flag, Shield
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import SubadminFeatureToggle from '@/components/SubadminFeatureToggle';
 
 // Predefined list of placement-focused tags
 const PRESET_TAGS = [
@@ -164,8 +165,35 @@ async function fetchAuthors(items: { author_id: string; author_type: string }[])
 
 export default function Forum() {
     const navigate = useNavigate();
-    const { role, roleData } = useRole();
+    const { role, roleData, refreshRole } = useRole();
     const { user } = useUser();
+
+    const disabledFeatures = roleData?.organizations?.disabled_features || [];
+    const isCommunityDisabled = disabledFeatures.includes('community');
+
+    const toggleCommunityForSubadmins = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!roleData?.organization_id) return;
+        const nextFeatures = isCommunityDisabled
+            ? disabledFeatures.filter((f: string) => f !== 'community')
+            : [...disabledFeatures, 'community'];
+
+        try {
+            const { error } = await insforge.database
+                .from('organizations')
+                .update({ disabled_features: nextFeatures })
+                .eq('id', roleData.organization_id);
+
+            if (error) throw error;
+            if (refreshRole) {
+                await refreshRole();
+            }
+        } catch (err) {
+            console.error("Failed to toggle community feature:", err);
+            alert("Failed to update feature settings.");
+        }
+    };
     const [threads, setThreads] = useState<any[]>([]);
     const [categories, setCategories] = useState<any[]>([]);
     const [searchParams, setSearchParams] = useSearchParams();
@@ -304,7 +332,7 @@ export default function Forum() {
                 }
 
                 // If user is admin, fetch reports
-                if (role === 'admin') {
+                if (role === 'admin' || role === 'organization_admin') {
                     await fetchReportsWithDetails();
                 }
             } catch (err) {
@@ -439,7 +467,7 @@ export default function Forum() {
                     [roleData.id]: {
                         name: roleData.name,
                         avatar_url: roleData.profile_photo_url || null,
-                        role: role === 'student' ? 'Student' : role === 'admin' ? 'Admin' : 'Recruiter',
+                        role: role === 'student' ? 'Student' : (role === 'admin' || role === 'organization_admin') ? 'Admin' : 'Recruiter',
                     }
                 }));
             }
@@ -1013,13 +1041,16 @@ export default function Forum() {
                     <h1 className="text-3xl font-heading font-bold">Community Forum</h1>
                     <p className="text-muted-foreground mt-1">This community is yours — ask freely, share openly, and learn from real student experiences.</p>
                 </div>
-                <Button onClick={() => setShowCreate(true)}>
-                    <Plus className="w-4 h-4 mr-2" />New Thread
-                </Button>
+                <div className="flex items-center gap-3">
+                    <SubadminFeatureToggle featureKey="community" />
+                    <Button onClick={() => setShowCreate(true)}>
+                        <Plus className="w-4 h-4 mr-2" />New Thread
+                    </Button>
+                </div>
             </div>
 
             {/* Admin Tabs */}
-            {role === 'admin' && (
+            {(role === 'admin' || role === 'organization_admin') && (
                 <div className="flex border-b border-border/40 gap-4">
                     <button
                         onClick={() => setActiveTab('threads')}
@@ -1047,7 +1078,7 @@ export default function Forum() {
                 </div>
             )}
 
-            {role === 'admin' && activeTab === 'moderation' ? (
+            {(role === 'admin' || role === 'organization_admin') && activeTab === 'moderation' ? (
                 <div className="space-y-4">
                     <h2 className="text-xl font-semibold">Flagged Content Reports</h2>
                     {groupedReports.length === 0 ? (
@@ -1207,7 +1238,7 @@ export default function Forum() {
                     ) : (
                         <div className="space-y-3 animate-stagger">
                             {sortedAndFiltered.map(thread => {
-                                const isUserAdmin = role === 'admin';
+                                const isUserAdmin = role === 'admin' || role === 'organization_admin';
                                 const showIdentity = !thread.is_anonymous || isUserAdmin;
 
                                 const rawAuthor = authors[thread.author_id] || {

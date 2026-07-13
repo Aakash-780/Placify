@@ -91,7 +91,7 @@ ${extractedText}`;
             // If we hit rate limits (429) or server errors (500/503)
             retries++;
             if (retries > maxRetries) break;
-            
+
             console.warn(`Gemini returned ${res.status}. Retrying in 10 seconds (Attempt ${retries}/${maxRetries})...`);
             await new Promise(resolve => setTimeout(resolve, 10000));
         }

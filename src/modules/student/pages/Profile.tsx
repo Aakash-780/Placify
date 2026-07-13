@@ -275,7 +275,11 @@ export default function Profile() {
     async function removeProfilePhoto() {
         if (!roleData?.id) return;
         try {
-            const table = role === 'admin' ? 'admins' : role === 'recruiter' ? 'recruiters' : 'students';
+            const table = 
+                role === 'admin' ? 'admins' : 
+                role === 'organization_admin' ? 'organization_admins' : 
+                role === 'recruiter' ? 'recruiters' : 
+                'students';
             const dbRes = await insforge.database.from(table).update({
                 profile_photo_url: null,
                 profile_photo_key: null,
@@ -420,6 +424,19 @@ export default function Profile() {
                     refreshRole();
                     generateStudentSummary(roleData.id).catch(err => console.error("[Profile] Summary generation failed:", err));
                 }
+            } else if (role === 'organization_admin') {
+                const { error } = await insforge.database.from('organization_admins').update({
+                    name: profile.name
+                }).eq('id', roleData.id);
+
+                if (error) {
+                    console.error("[Profile] Failed to update org admin profile:", error);
+                    showToast(`Failed to save profile: ${error.message}`, "error");
+                } else {
+                    showToast("Profile updated successfully!", "success");
+                    setEditing(false);
+                    refreshRole();
+                }
             } else if (role === 'admin') {
                 const { error } = await insforge.database.from('admins').update({
                     name: profile.name,
@@ -508,7 +525,11 @@ export default function Profile() {
                 return;
             }
             if (data) {
-                const table = role === 'admin' ? 'admins' : role === 'recruiter' ? 'recruiters' : 'students';
+                const table = 
+                    role === 'admin' ? 'admins' : 
+                    role === 'organization_admin' ? 'organization_admins' : 
+                    role === 'recruiter' ? 'recruiters' : 
+                    'students';
                 const dbRes = await insforge.database.from(table).update({
                     profile_photo_url: data.url,
                     profile_photo_key: data.key,
@@ -724,11 +745,11 @@ export default function Profile() {
         return <RecruiterProfile />;
     }
 
-    if (role === 'admin') {
+    if (role === 'admin' || role === 'organization_admin') {
         return (
             <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <h1 className="text-3xl font-heading font-bold">Admin Profile</h1>
+                    <h1 className="text-3xl font-heading font-bold">{role === 'organization_admin' ? 'Org Admin Profile' : 'Admin Profile'}</h1>
                     {!editing ? (
                         <Button onClick={() => setEditing(true)}><Pencil className="w-4 h-4 mr-2" />Edit Profile</Button>
                     ) : (
@@ -764,21 +785,25 @@ export default function Profile() {
                                     {editing ? <Input value={profile.name || ''} onChange={e => setProfile({ ...profile, name: e.target.value })} /> : <p className="mt-1 font-semibold">{profile.name || '—'}</p>}
                                 </div>
                                 <div>
-                                    <Label>Official College Email</Label>
+                                    <Label>Official Email</Label>
                                     {editing ? <Input type="email" value={profile.email || ''} onChange={e => setProfile({ ...profile, email: e.target.value })} disabled /> : <p className="mt-1 text-muted-foreground">{profile.email || '—'}</p>}
                                 </div>
-                                <div>
-                                    <Label>Employee ID / Staff ID</Label>
-                                    {editing ? <Input value={profile.employee_id || ''} onChange={e => setProfile({ ...profile, employee_id: e.target.value })} placeholder="e.g. EMP-1024" /> : <p className="mt-1">{profile.employee_id || '—'}</p>}
-                                </div>
-                                <div>
-                                    <Label>Designation</Label>
-                                    {editing ? <Input value={profile.designation || ''} onChange={e => setProfile({ ...profile, designation: e.target.value })} placeholder="e.g. Training & Placement Officer" /> : <p className="mt-1">{profile.designation || '—'}</p>}
-                                </div>
-                                <div className="sm:col-span-2">
-                                    <Label>Department</Label>
-                                    {editing ? <Input value={profile.department || ''} onChange={e => setProfile({ ...profile, department: e.target.value })} placeholder="e.g. Computer Science" /> : <p className="mt-1">{profile.department || '—'}</p>}
-                                </div>
+                                {role !== 'organization_admin' && (
+                                    <>
+                                        <div>
+                                            <Label>Employee ID / Staff ID</Label>
+                                            {editing ? <Input value={profile.employee_id || ''} onChange={e => setProfile({ ...profile, employee_id: e.target.value })} placeholder="e.g. EMP-1024" /> : <p className="mt-1">{profile.employee_id || '—'}</p>}
+                                        </div>
+                                        <div>
+                                            <Label>Designation</Label>
+                                            {editing ? <Input value={profile.designation || ''} onChange={e => setProfile({ ...profile, designation: e.target.value })} placeholder="e.g. Training & Placement Officer" /> : <p className="mt-1">{profile.designation || '—'}</p>}
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                            <Label>Department</Label>
+                                            {editing ? <Input value={profile.department || ''} onChange={e => setProfile({ ...profile, department: e.target.value })} placeholder="e.g. Computer Science" /> : <p className="mt-1">{profile.department || '—'}</p>}
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </CardContent>
@@ -792,24 +817,49 @@ export default function Profile() {
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <Label>College Name</Label>
-                                {editing ? <Input value={profile.college_name || ''} onChange={e => setProfile({ ...profile, college_name: e.target.value })} /> : <p className="mt-1">{profile.college_name || '—'}</p>}
+                        {role === 'organization_admin' ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <Label>Organization Name</Label>
+                                    <p className="mt-1 font-semibold">{roleData?.organizations?.name || '—'}</p>
+                                </div>
+                                <div>
+                                    <Label>Organization Code</Label>
+                                    <p className="mt-1">{roleData?.organizations?.code || '—'}</p>
+                                </div>
+                                <div>
+                                    <Label>Website</Label>
+                                    <p className="mt-1 text-primary hover:underline">
+                                        {roleData?.organizations?.website ? (
+                                            <a href={roleData.organizations.website} target="_blank" rel="noopener noreferrer">{roleData.organizations.website}</a>
+                                        ) : '—'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <Label>Address</Label>
+                                    <p className="mt-1 text-muted-foreground">{roleData?.organizations?.address || '—'}</p>
+                                </div>
                             </div>
-                            <div>
-                                <Label>Campus Name</Label>
-                                {editing ? <Input value={profile.campus_name || ''} onChange={e => setProfile({ ...profile, campus_name: e.target.value })} /> : <p className="mt-1">{profile.campus_name || '—'}</p>}
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <Label>College Name</Label>
+                                    {editing ? <Input value={profile.college_name || ''} onChange={e => setProfile({ ...profile, college_name: e.target.value })} /> : <p className="mt-1">{profile.college_name || '—'}</p>}
+                                </div>
+                                <div>
+                                    <Label>Campus Name</Label>
+                                    {editing ? <Input value={profile.campus_name || ''} onChange={e => setProfile({ ...profile, campus_name: e.target.value })} /> : <p className="mt-1">{profile.campus_name || '—'}</p>}
+                                </div>
+                                <div>
+                                    <Label>Placement Cell Name</Label>
+                                    {editing ? <Input value={profile.placement_cell_name || ''} onChange={e => setProfile({ ...profile, placement_cell_name: e.target.value })} placeholder="e.g. Training & Placement Cell" /> : <p className="mt-1">{profile.placement_cell_name || '—'}</p>}
+                                </div>
+                                <div>
+                                    <Label>Office Contact Number</Label>
+                                    {editing ? <Input value={profile.office_contact || ''} onChange={e => setProfile({ ...profile, office_contact: e.target.value })} /> : <p className="mt-1">{profile.office_contact || '—'}</p>}
+                                </div>
                             </div>
-                            <div>
-                                <Label>Placement Cell Name</Label>
-                                {editing ? <Input value={profile.placement_cell_name || ''} onChange={e => setProfile({ ...profile, placement_cell_name: e.target.value })} placeholder="e.g. Training & Placement Cell" /> : <p className="mt-1">{profile.placement_cell_name || '—'}</p>}
-                            </div>
-                            <div>
-                                <Label>Office Contact Number</Label>
-                                {editing ? <Input value={profile.office_contact || ''} onChange={e => setProfile({ ...profile, office_contact: e.target.value })} /> : <p className="mt-1">{profile.office_contact || '—'}</p>}
-                            </div>
-                        </div>
+                        )}
                     </CardContent>
                 </Card>
 

@@ -3,8 +3,8 @@ import { createClient } from '@insforge/sdk';
 import { 
   ShieldCheck, Loader2, LogOut, Settings, Activity, AlertCircle, 
   BarChart3, Bell, RefreshCw, X, Plus, Search, Calendar, Building2, 
-  Edit2, Key, Lock, Check, CheckCircle, Sun, Moon,
-  Mail, FileText, Building, User, ExternalLink
+  Key, Lock, Check, CheckCircle, Sun, Moon,
+  Mail, FileText, Building, User, ExternalLink, Users
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -24,7 +24,38 @@ function decryptPassword(encrypted: string): string {
     return result;
 }
 
-type TabType = 'dashboard' | 'organizations' | 'pending_orgs' | 'analytics' | 'logs' | 'settings' | 'emails';
+function getCompanyName(companyVal: any): string {
+  if (!companyVal) return '';
+  const trimmed = companyVal.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parsed.companyName || parsed.name || trimmed;
+    } catch (e) {
+      return trimmed;
+    }
+  }
+  return trimmed;
+}
+
+const ROLE_LABELS: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  sub_admin:            { label: 'Sub Admin',          color: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/20' },
+  placement_officer:    { label: 'Placement Officer',  color: 'text-violet-400',  bg: 'bg-violet-500/10',  border: 'border-violet-500/20' },
+  tpo:                  { label: 'TPO',                color: 'text-indigo-400',  bg: 'bg-indigo-500/10',  border: 'border-indigo-500/20' },
+  hr:                   { label: 'HR',                 color: 'text-pink-400',    bg: 'bg-pink-500/10',    border: 'border-pink-500/20' },
+  coordinator:          { label: 'Coordinator',        color: 'text-teal-400',    bg: 'bg-teal-500/10',    border: 'border-teal-500/20' },
+  organization_admin:   { label: 'Org Admin',          color: 'text-amber-400',   bg: 'bg-amber-500/10',   border: 'border-amber-500/20' },
+};
+function formatRole(role: string | undefined) {
+  const key = (role || '').toLowerCase().replace(/-/g, '_');
+  const meta = ROLE_LABELS[key];
+  if (meta) return meta;
+  // Fallback: title-case the snake_case string
+  const label = (role || 'Unknown').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  return { label, color: 'text-slate-400', bg: 'bg-slate-800', border: 'border-slate-700' };
+}
+
+type TabType = 'dashboard' | 'organizations' | 'pending_orgs' | 'analytics' | 'logs' | 'settings' | 'emails' | 'users';
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
@@ -98,9 +129,9 @@ export default function App() {
 
   // Modals & Action States
   const [showCreateOrgModal, setShowCreateOrgModal] = useState(false);
-  const [showEditOrgModal, setShowEditOrgModal] = useState<any | null>(null);
   const [showResetCredsModal, setShowResetCredsModal] = useState<any | null>(null);
   const [showViewOrgModal, setShowViewOrgModal] = useState<any | null>(null);
+  const [isEditingOrgDetails, setIsEditingOrgDetails] = useState(false);
 
   // Org Creation Fields
   const [orgName, setOrgName] = useState('');
@@ -133,9 +164,62 @@ export default function App() {
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
   const [logFilter, setLogFilter] = useState('all');
+  const [analyticsOrgSearchTerm, setAnalyticsOrgSearchTerm] = useState('');
   const [selectedAnalyticsOrgId, setSelectedAnalyticsOrgId] = useState<string>('');
   const [activeMetricDetail, setActiveMetricDetail] = useState<'subadmins' | 'students' | 'recruiters' | 'companies' | null>(null);
   const [showAllStudentsModal, setShowAllStudentsModal] = useState(false);
+
+  // Dashboard Org-wise Analytics states
+  const [dashboardOrgSearchTerm, setDashboardOrgSearchTerm] = useState('');
+  const [selectedDashboardOrgId, setSelectedDashboardOrgId] = useState<string>('');
+  const [dashboardActiveMetricDetail, setDashboardActiveMetricDetail] = useState<'subadmins' | 'students' | 'recruiters' | 'companies' | null>(null);
+  const [orgStatusFilter, setOrgStatusFilter] = useState<'all' | 'Active' | 'Suspended' | 'Pending'>('all');
+
+  // Subscription setup modal states
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [subscriptionRequest, setSubscriptionRequest] = useState<any | null>(null);
+  const [subType, setSubType] = useState<'Trial' | 'Monthly' | 'Lifetime'>('Trial');
+  const [subMonths, setSubMonths] = useState<number>(1);
+  const [subConfirmVerified, setSubConfirmVerified] = useState(false);
+  const [subscriptionActionLoading, setSubscriptionActionLoading] = useState(false);
+  const [showApprovalSuccess, setShowApprovalSuccess] = useState(false);
+  const [approvedOrgName, setApprovedOrgName] = useState('');
+
+  // Student Management Modal States
+  const [showStudentModal, setShowStudentModal] = useState<any | null>(null);
+  const [studentNewPassword, setStudentNewPassword] = useState('');
+  const [studentCredsError, setStudentCredsError] = useState('');
+  const [studentCredsResetting, setStudentCredsResetting] = useState(false);
+  const [studentCredsSuccess, setStudentCredsSuccess] = useState<{ email: string; pass: string } | null>(null);
+  const [studentStatusUpdating, setStudentStatusUpdating] = useState(false);
+
+  // Subadmin Management Modal States
+  const [showSubadminModal, setShowSubadminModal] = useState<any | null>(null);
+  const [subadminNewPassword, setSubadminNewPassword] = useState('');
+  const [subadminCredsError, setSubadminCredsError] = useState('');
+  const [subadminCredsResetting, setSubadminCredsResetting] = useState(false);
+  const [subadminCredsSuccess, setSubadminCredsSuccess] = useState<{ email: string; pass: string } | null>(null);
+  const [subadminStatusUpdating, setSubadminStatusUpdating] = useState(false);
+
+  // Detail panel search
+  const [detailSearchTerm, setDetailSearchTerm] = useState('');
+
+  // User Management Tab States
+  const [umSearch, setUmSearch] = useState('');
+  const [umRoleFilter, setUmRoleFilter] = useState<'all' | 'admin' | 'subadmin' | 'student' | 'recruiter'>('all');
+  const [umOrgFilter, setUmOrgFilter] = useState<string>('all');
+  const [selectedUmUser, setSelectedUmUser] = useState<any | null>(null);
+  const [umNewPassword, setUmNewPassword] = useState('');
+  const [umCredsError, setUmCredsError] = useState('');
+  const [umCredsResetting, setUmCredsResetting] = useState(false);
+  const [umCredsSuccess, setUmCredsSuccess] = useState<{ email: string; pass: string } | null>(null);
+  const [umStatusUpdating, setUmStatusUpdating] = useState(false);
+  const [showCompanyModal, setShowCompanyModal] = useState<any | null>(null);
+
+  // Editing organization subscription states
+  const [editingOrgSubId, setEditingOrgSubId] = useState<string | null>(null);
+  const [editSubType, setEditSubType] = useState<'Trial' | 'Monthly' | 'Lifetime'>('Trial');
+  const [editSubMonths, setEditSubMonths] = useState<number>(1);
 
   function showToast(message: string, type: 'success' | 'error' | 'info' = 'success') {
     setToast({ message, type });
@@ -150,6 +234,38 @@ export default function App() {
     }
     return pass;
   }
+
+  // Keep selected dashboard org in sync with filtered list
+  useEffect(() => {
+    const filtered = organizations.filter(o => 
+      o.name.toLowerCase().includes(dashboardOrgSearchTerm.toLowerCase()) ||
+      o.code.toLowerCase().includes(dashboardOrgSearchTerm.toLowerCase())
+    );
+    if (filtered.length > 0) {
+      const isStillPresent = filtered.some(o => o.id === selectedDashboardOrgId);
+      if (!isStillPresent) {
+        setSelectedDashboardOrgId(filtered[0].id);
+      }
+    } else {
+      setSelectedDashboardOrgId('');
+    }
+  }, [dashboardOrgSearchTerm, organizations, selectedDashboardOrgId]);
+
+  // Keep selected analytics org in sync with filtered list
+  useEffect(() => {
+    const filtered = organizations.filter(o => 
+      o.name.toLowerCase().includes(analyticsOrgSearchTerm.toLowerCase()) ||
+      o.code.toLowerCase().includes(analyticsOrgSearchTerm.toLowerCase())
+    );
+    if (filtered.length > 0) {
+      const isStillPresent = filtered.some(o => o.id === selectedAnalyticsOrgId);
+      if (!isStillPresent) {
+        setSelectedAnalyticsOrgId(filtered[0].id);
+      }
+    } else {
+      setSelectedAnalyticsOrgId('');
+    }
+  }, [analyticsOrgSearchTerm, organizations, selectedAnalyticsOrgId]);
 
   // Check auth on startup
   useEffect(() => {
@@ -310,6 +426,9 @@ export default function App() {
       if (!selectedAnalyticsOrgId && organizationsList.length > 0) {
         setSelectedAnalyticsOrgId(organizationsList[0].id);
       }
+      if (!selectedDashboardOrgId && organizationsList.length > 0) {
+        setSelectedDashboardOrgId(organizationsList[0].id);
+      }
     } catch (err) {
       console.error('Error loading SaaS variables:', err);
       showToast('Error synchronizing platform node data.', 'error');
@@ -402,8 +521,7 @@ export default function App() {
   }
 
   // Edit Tenant Details
-  async function handleEditOrganization(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleEditOrganization(orgId: string) {
     setOrgEditingError('');
     if (!editName.trim()) {
       setOrgEditingError('Organization name is required.');
@@ -420,12 +538,12 @@ export default function App() {
           address: editAddress.trim() || null,
           logo_url: editLogoUrl.trim() || null
         })
-        .eq('id', showEditOrgModal.id);
+        .eq('id', orgId);
 
       if (error) throw error;
 
       // Also update the primary admin's name/email if changed
-      const primaryAdmin = admins.find((a: any) => a.organization_id === showEditOrgModal.id);
+      const primaryAdmin = admins.find((a: any) => a.organization_id === orgId);
       if (primaryAdmin && (editAdminName.trim() || editAdminEmail.trim())) {
         const adminUpdates: any = {};
         if (editAdminName.trim() && editAdminName.trim() !== primaryAdmin.name) {
@@ -440,14 +558,24 @@ export default function App() {
           // Also update organization_admins table to keep them in sync
           await insforge.database.from('organization_admins')
             .update(adminUpdates)
-            .eq('organization_id', showEditOrgModal.id);
+            .eq('organization_id', orgId);
         }
       }
 
-      await writeAuditLog(`Updated organization details: ${editName.trim()}`, showEditOrgModal.code);
-      setShowEditOrgModal(null);
+      await writeAuditLog(`Updated organization details: ${editName.trim()}`, showViewOrgModal.code);
       showToast('Organization details updated successfully.');
+      setIsEditingOrgDetails(false);
       await loadData();
+      
+      // Refresh local showViewOrgModal details
+      const { data: updatedOrg } = await insforge.database
+        .from('organizations')
+        .select('*')
+        .eq('id', orgId)
+        .maybeSingle();
+      if (updatedOrg) {
+        setShowViewOrgModal(updatedOrg);
+      }
     } catch (err: any) {
       setOrgEditingError(err.message || 'Failed to update organization details.');
     } finally {
@@ -458,10 +586,19 @@ export default function App() {
   // Toggle Organization Status
   async function handleToggleOrgStatus(org: any) {
     const newStatus = org.status === 'Active' ? 'Suspended' : 'Active';
+    const nextSubStatus = newStatus === 'Active' ? 'Active' : 'Suspended';
     try {
+      const updateData: any = { 
+        status: newStatus,
+        subscription_status: nextSubStatus
+      };
+      if (newStatus === 'Suspended') {
+        updateData.last_suspended_at = new Date().toISOString();
+      }
+      
       const { error } = await insforge.database
         .from('organizations')
-        .update({ status: newStatus })
+        .update(updateData)
         .eq('id', org.id);
 
       if (error) throw error;
@@ -474,16 +611,88 @@ export default function App() {
     }
   }
 
+  // Update/Extend Organization Subscription
+  const [subscriptionEditLoading, setSubscriptionEditLoading] = useState(false);
+  
+  async function handleUpdateOrgSubscription(orgId: string, type: 'Trial' | 'Monthly' | 'Lifetime', months: number) {
+    setSubscriptionEditLoading(true);
+    try {
+      const startDate = new Date();
+      let endDate: Date | null = null;
+      let autoSuspend = true;
+
+      if (type === 'Trial') {
+        endDate = new Date();
+        endDate.setDate(endDate.getDate() + 15);
+      } else if (type === 'Monthly') {
+        endDate = new Date();
+        endDate.setMonth(endDate.getMonth() + months);
+      } else if (type === 'Lifetime') {
+        endDate = null;
+        autoSuspend = false;
+      }
+
+      const { error } = await insforge.database
+        .from('organizations')
+        .update({
+          subscription_type: type,
+          subscription_status: 'Active',
+          subscription_start_date: startDate.toISOString(),
+          subscription_end_date: endDate ? endDate.toISOString() : null,
+          auto_suspend: autoSuspend,
+          status: 'Active' // Reactivate if it was suspended/expired!
+        })
+        .eq('id', orgId);
+
+      if (error) throw error;
+
+      showToast('Subscription updated successfully!');
+      await loadData();
+      
+      // Update local state of showViewOrgModal if currently open to reflect change immediately
+      if (showViewOrgModal && showViewOrgModal.id === orgId) {
+        const { data: updatedOrg } = await insforge.database
+          .from('organizations')
+          .select('*')
+          .eq('id', orgId)
+          .maybeSingle();
+        if (updatedOrg) {
+          setShowViewOrgModal(updatedOrg);
+        }
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update subscription.', 'error');
+    } finally {
+      setSubscriptionEditLoading(false);
+    }
+  }
+
   // Approve Pending Organization Request
-  async function handleApprovePendingRequest(req: any) {
-    if (!confirm(`Are you sure you want to APPROVE the onboarding request for '${req.organization_name}'?`)) return;
+  async function handleApprovePendingRequest(req: any, subDetails: { type: 'Trial' | 'Monthly' | 'Lifetime'; months: number }) {
     setActionLoading(true);
+    setSubscriptionActionLoading(true);
     let createdOrgId = '';
     try {
       // 1. Decrypt plaintext password
       const plainPass = decryptPassword(req.temp_password);
 
-      // 2. Insert into organizations
+      // 2. Compute subscription dates
+      const startDate = new Date();
+      let endDate: Date | null = null;
+      let autoSuspend = true;
+
+      if (subDetails.type === 'Trial') {
+        endDate = new Date();
+        endDate.setDate(endDate.getDate() + 15);
+      } else if (subDetails.type === 'Monthly') {
+        endDate = new Date();
+        endDate.setMonth(endDate.getMonth() + subDetails.months);
+      } else if (subDetails.type === 'Lifetime') {
+        endDate = null;
+        autoSuspend = false;
+      }
+
+      // 3. Insert into organizations
       const { data: newOrg, error: orgErr } = await insforge.database
         .from('organizations')
         .insert([{
@@ -492,7 +701,15 @@ export default function App() {
           website: req.website || null,
           address: req.address || null,
           logo_url: req.logo_url || null,
-          status: 'Active'
+          status: 'Active',
+          subscription_type: subDetails.type,
+          subscription_status: 'Active',
+          subscription_start_date: startDate.toISOString(),
+          subscription_end_date: endDate ? endDate.toISOString() : null,
+          trial_used: subDetails.type === 'Trial',
+          auto_suspend: autoSuspend,
+          approved_by: currentUser?.name || 'Super Admin',
+          approved_at: new Date().toISOString()
         }])
         .select()
         .single();
@@ -618,9 +835,8 @@ export default function App() {
       }]);
 
       await writeAuditLog(`Approved onboarding request for: ${req.organization_name}`, req.generated_org_code);
-      showToast(`Onboarding request for '${req.organization_name}' has been approved successfully!`);
-      setShowRequestDetail(false);
-      setSelectedRequest(null);
+      setApprovedOrgName(req.organization_name);
+      setShowApprovalSuccess(true);
       await loadData();
     } catch (err: any) {
       console.error('Approve onboarding request failed:', err);
@@ -631,6 +847,7 @@ export default function App() {
       showToast(err.message || 'Onboarding approval failed.', 'error');
     } finally {
       setActionLoading(false);
+      setSubscriptionActionLoading(false);
     }
   }
 
@@ -758,7 +975,175 @@ export default function App() {
     }
   }
 
+  // Reset Student Password via RPC
+  async function handleStudentResetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setStudentCredsError('');
+    if (!studentNewPassword.trim()) { setStudentCredsError('Please enter a password.'); return; }
+    setStudentCredsResetting(true);
+    try {
+      const { error } = await insforge.database.rpc('reset_user_password', {
+        user_email: showStudentModal.email,
+        new_password: studentNewPassword.trim()
+      });
+      if (error) throw error;
+      await writeAuditLog(`Reset password for student: ${showStudentModal.email}`, showStudentModal.name);
+      setStudentCredsSuccess({ email: showStudentModal.email, pass: studentNewPassword.trim() });
+      setStudentNewPassword('');
+      showToast('Student password updated successfully.');
+    } catch (err: any) {
+      setStudentCredsError(err.message || 'Password reset failed.');
+    } finally {
+      setStudentCredsResetting(false);
+    }
+  }
+
+  // Update Student Account Status or Delete
+  async function handleStudentStatusChange(newStatus: 'Active' | 'Suspended' | '__delete__') {
+    if (newStatus === '__delete__') {
+      if (!confirm(`Permanently delete ${showStudentModal.name || showStudentModal.email}? This cannot be undone.`)) return;
+    }
+    setStudentStatusUpdating(true);
+    try {
+      if (newStatus === '__delete__') {
+        const { error } = await insforge.database.from('students').delete().eq('id', showStudentModal.id);
+        if (error) throw error;
+        await writeAuditLog(`Deleted student account: ${showStudentModal.email}`, showStudentModal.name);
+        showToast('Student account permanently deleted.');
+        setShowStudentModal(null);
+      } else {
+        const { error } = await insforge.database.from('students').update({ account_status: newStatus }).eq('id', showStudentModal.id);
+        if (error) throw error;
+        await writeAuditLog(`Changed student status to ${newStatus}: ${showStudentModal.email}`, showStudentModal.name);
+        setShowStudentModal({ ...showStudentModal, account_status: newStatus });
+        showToast(`Student account ${newStatus === 'Active' ? 'activated' : 'suspended'}.`);
+      }
+      const { data: stdData } = await insforge.database.from('students').select('id, name, email, branch, graduation_year, cgpa, organization_id, account_status');
+      setStudents(stdData || []);
+    } catch (err: any) {
+      showToast(err.message || 'Action failed.', 'error');
+    } finally {
+      setStudentStatusUpdating(false);
+    }
+  }
+
+  // Reset Subadmin Password via RPC
+  async function handleSubadminResetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setSubadminCredsError('');
+    if (!subadminNewPassword.trim()) { setSubadminCredsError('Please enter a password.'); return; }
+    setSubadminCredsResetting(true);
+    try {
+      const { error } = await insforge.database.rpc('reset_user_password', {
+        user_email: showSubadminModal.email,
+        new_password: subadminNewPassword.trim()
+      });
+      if (error) throw error;
+      await writeAuditLog(`Reset password for subadmin: ${showSubadminModal.email}`, showSubadminModal.name);
+      setSubadminCredsSuccess({ email: showSubadminModal.email, pass: subadminNewPassword.trim() });
+      setSubadminNewPassword('');
+      showToast('Subadmin password updated successfully.');
+    } catch (err: any) {
+      setSubadminCredsError(err.message || 'Password reset failed.');
+    } finally {
+      setSubadminCredsResetting(false);
+    }
+  }
+
+  // Update Subadmin Account Status or Delete
+  async function handleSubadminStatusChange(newStatus: 'Active' | 'Suspended' | '__delete__') {
+    if (newStatus === '__delete__') {
+      if (!confirm(`Permanently delete ${showSubadminModal.name || showSubadminModal.email}? This cannot be undone.`)) return;
+    }
+    setSubadminStatusUpdating(true);
+    try {
+      if (newStatus === '__delete__') {
+        const { error } = await insforge.database.from('admins').delete().eq('id', showSubadminModal.id);
+        if (error) throw error;
+        await writeAuditLog(`Deleted subadmin account: ${showSubadminModal.email}`, showSubadminModal.name);
+        showToast('Subadmin account permanently deleted.');
+        setShowSubadminModal(null);
+      } else {
+        const { error } = await insforge.database.from('admins').update({ status: newStatus }).eq('id', showSubadminModal.id);
+        if (error) throw error;
+        await writeAuditLog(`Changed subadmin status to ${newStatus}: ${showSubadminModal.email}`, showSubadminModal.name);
+        setShowSubadminModal({ ...showSubadminModal, status: newStatus });
+        showToast(`Subadmin account ${newStatus === 'Active' ? 'activated' : 'suspended'}.`);
+      }
+      const { data: subAdmData } = await insforge.database.from('admins').select('*').neq('role', 'organization_admin');
+      setSubAdmins(subAdmData || []);
+    } catch (err: any) {
+      showToast(err.message || 'Action failed.', 'error');
+    } finally {
+      setSubadminStatusUpdating(false);
+    }
+  }
+
+  // User Management: Reset Password
+  async function handleUmResetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setUmCredsError('');
+    if (!umNewPassword.trim()) { setUmCredsError('Please enter a password.'); return; }
+    setUmCredsResetting(true);
+    try {
+      const { error } = await insforge.database.rpc('reset_user_password', {
+        user_email: selectedUmUser.email,
+        new_password: umNewPassword.trim()
+      });
+      if (error) throw error;
+      await writeAuditLog(`Reset password for user: ${selectedUmUser.email}`, selectedUmUser.name);
+      setUmCredsSuccess({ email: selectedUmUser.email, pass: umNewPassword.trim() });
+      setUmNewPassword('');
+      showToast('Password updated successfully.');
+    } catch (err: any) {
+      setUmCredsError(err.message || 'Password reset failed.');
+    } finally {
+      setUmCredsResetting(false);
+    }
+  }
+
+  // User Management: Change Status / Delete
+  async function handleUmStatusChange(newStatus: 'Active' | 'Suspended' | '__delete__') {
+    if (newStatus === '__delete__') {
+      if (!confirm(`Permanently delete ${selectedUmUser.name || selectedUmUser.email}? This cannot be undone.`)) return;
+    }
+    setUmStatusUpdating(true);
+    const table = selectedUmUser._type === 'student' ? 'students'
+                 : selectedUmUser._type === 'recruiter' ? 'recruiters'
+                 : 'admins';
+    const statusField = selectedUmUser._type === 'student' ? 'account_status' : 'status';
+    try {
+      if (newStatus === '__delete__') {
+        const { error } = await insforge.database.from(table).delete().eq('id', selectedUmUser.id);
+        if (error) throw error;
+        await writeAuditLog(`Deleted ${selectedUmUser._type} account: ${selectedUmUser.email}`, selectedUmUser.name);
+        showToast('User account permanently deleted.');
+        setSelectedUmUser(null);
+      } else {
+        const { error } = await insforge.database.from(table).update({ [statusField]: newStatus }).eq('id', selectedUmUser.id);
+        if (error) throw error;
+        await writeAuditLog(`Changed ${selectedUmUser._type} status to ${newStatus}: ${selectedUmUser.email}`, selectedUmUser.name);
+        setSelectedUmUser({ ...selectedUmUser, [statusField]: newStatus });
+        showToast(`User account ${newStatus === 'Active' ? 'activated' : 'suspended'}.`);
+      }
+      // Reload relevant data
+      const { data: admData } = await insforge.database.from('admins').select('*').eq('role', 'organization_admin');
+      setAdmins(admData || []);
+      const { data: subAdmData } = await insforge.database.from('admins').select('*').neq('role', 'organization_admin');
+      setSubAdmins(subAdmData || []);
+      const { data: stdData } = await insforge.database.from('students').select('id, name, email, branch, graduation_year, cgpa, organization_id, account_status');
+      setStudents(stdData || []);
+      const { data: recData } = await insforge.database.from('recruiters').select('id, name, email, company, organization_id, status');
+      setRecruiters(recData || []);
+    } catch (err: any) {
+      showToast(err.message || 'Action failed.', 'error');
+    } finally {
+      setUmStatusUpdating(false);
+    }
+  }
+
   // Global settings update
+
   async function handleSaveSettings(key: string, value: any) {
     try {
       const { error } = await insforge.database.from('platform_settings').upsert({
@@ -906,7 +1291,17 @@ export default function App() {
     return matchesSearch;
   });
 
-  const activeOrgsList = filteredOrgs.filter(o => o.status !== 'Pending');
+  const activeOrgsList = filteredOrgs.filter(o => {
+    if (orgStatusFilter === 'all') return o.status !== 'Pending';
+    return o.status === orgStatusFilter;
+  });
+
+  const filteredPendingOrgs = orgRequests
+    .filter(r => r.status === 'Pending')
+    .filter(r => 
+      r.organization_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.generated_org_code.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
   const filteredAuditLogs = auditLogs.filter(log => {
     const matchesSearch = log.action.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -926,7 +1321,19 @@ export default function App() {
   const selectedOrgJobs = jobs.filter(j => j.organization_id === selectedAnalyticsOrgId);
   const selectedOrgCompaniesCount = new Set([
     ...selectedOrgJobs.map(j => j.company?.trim()),
-    ...selectedOrgRecruiters.map(r => r.company?.trim())
+    ...selectedOrgRecruiters.map(r => getCompanyName(r.company))
+  ].filter(Boolean)).size;
+
+  // Calculate selected org dashboard data
+  const selectedDashboardOrg = organizations.find(o => o.id === selectedDashboardOrgId);
+  const selectedDashboardOrgStudents = students.filter(s => s.organization_id === selectedDashboardOrgId);
+  const selectedDashboardOrgRecruiters = recruiters.filter(r => r.organization_id === selectedDashboardOrgId);
+  const selectedDashboardOrgAdmin = admins.find(a => a.organization_id === selectedDashboardOrgId);
+  const selectedDashboardOrgSubAdmins = subAdmins.filter(sa => sa.organization_id === selectedDashboardOrgId);
+  const selectedDashboardOrgJobs = jobs.filter(j => j.organization_id === selectedDashboardOrgId);
+  const selectedDashboardOrgCompaniesCount = new Set([
+    ...selectedDashboardOrgJobs.map(j => j.company?.trim()),
+    ...selectedDashboardOrgRecruiters.map(r => getCompanyName(r.company))
   ].filter(Boolean)).size;
 
   return (
@@ -941,7 +1348,7 @@ export default function App() {
       )}
 
       {/* SIDEBAR */}
-      <aside className="w-64 border-r border-slate-900 bg-slate-950/80 backdrop-blur-xl flex flex-col justify-between flex-shrink-0 z-30 select-none">
+      <aside className="w-64 border-r border-slate-900 bg-slate-950/80 backdrop-blur-xl flex flex-col justify-between flex-shrink-0 z-30">
         <div>
           {/* Brand header */}
           <div className="p-6 border-b border-slate-900 flex items-center gap-3">
@@ -1039,6 +1446,7 @@ export default function App() {
               { id: 'organizations', label: 'Organizations', icon: Building2 },
               { id: 'pending_orgs', label: 'Pending Requests', icon: CheckCircle, badge: stats.pendingOnboardings },
               { id: 'emails', label: 'Email Logs', icon: Mail },
+              { id: 'users', label: 'User Management', icon: Users },
               { id: 'analytics', label: 'Org Analytics', icon: BarChart3 },
               { id: 'logs', label: 'Audit Logs', icon: Settings },
               { id: 'settings', label: 'System Settings', icon: Lock },
@@ -1090,16 +1498,20 @@ export default function App() {
       </aside>
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 flex flex-col min-h-screen overflow-y-auto select-none relative z-10 p-8 space-y-8 max-w-7xl mx-auto w-full">
+      <main className="flex-1 flex flex-col min-h-screen overflow-y-auto relative z-10 p-8 space-y-8 max-w-7xl mx-auto w-full">
         
         {/* HEADER BAR */}
         <header className="flex justify-between items-center pb-6 border-b border-slate-900">
           <div>
             <h1 className="text-2xl font-heading font-extrabold text-white capitalize">
-              {activeTab === 'dashboard' ? 'SaaS Command Desk' : activeTab.replace(/_/g, ' ')}
+              {activeTab === 'dashboard' ? 'Placify Command Desk'
+                : activeTab === 'users' ? 'User Management'
+                : activeTab.replace(/_/g, ' ')}
             </h1>
             <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              Platform owner settings node. Scoped to multi-tenant organization directory variables.
+              {activeTab === 'users'
+                ? 'Search, filter, and manage all users across every organization from one place.'
+                : 'Platform owner settings node. Scoped to multi-tenant organization directory variables.'}
             </p>
           </div>
 
@@ -1184,7 +1596,7 @@ export default function App() {
             {/* SaaS Banner */}
             <div className="relative border border-slate-800 bg-slate-900/40 p-6 rounded-2xl overflow-hidden shadow-xl">
               <div className="absolute top-0 right-0 w-80 h-full bg-gradient-to-l from-blue-500/15 to-transparent pointer-events-none" />
-              <h2 className="text-xl font-heading font-bold text-white">Platform Owner Command Deck</h2>
+              <h2 className="text-xl font-heading font-bold text-white">Platform Owner Command Desk</h2>
               <p className="text-xs text-slate-400 mt-1.5 leading-relaxed max-w-2xl">
                 Create and configure colleges and organizations inside Placify. Maintain tenants, verify onboarding requests, monitor system logs, and inspect platform analytics globally.
               </p>
@@ -1233,6 +1645,325 @@ export default function App() {
                   <span className="text-[10px] text-slate-400 mt-1 block leading-tight">{stat.label}</span>
                 </div>
               ))}
+            </div>
+
+            {/* TENANT SPECIFIC INSIGHTS */}
+            <div className="border border-slate-900 bg-slate-950 p-6 rounded-2xl space-y-6">
+              <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 border-b border-slate-900 pb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-white font-heading">Tenant Specific Insight</h3>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Inspect metrics scoped to a specific organization.</p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {/* Search bar */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                    <input
+                      type="text"
+                      placeholder="Search tenant..."
+                      value={dashboardOrgSearchTerm}
+                      onChange={(e) => {
+                        setDashboardOrgSearchTerm(e.target.value);
+                        setDashboardActiveMetricDetail(null);
+                      }}
+                      className="h-9 pl-9 pr-3 rounded-xl border border-slate-900 bg-slate-900/30 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors w-44 md:w-56"
+                    />
+                  </div>
+
+                  {/* Dropdown select */}
+                  <select
+                    value={selectedDashboardOrgId}
+                    onChange={(e) => {
+                      setSelectedDashboardOrgId(e.target.value);
+                      setDashboardActiveMetricDetail(null);
+                    }}
+                    className="h-9 px-3 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-200 focus:outline-none"
+                  >
+                    {organizations
+                      .filter(o => 
+                        o.name.toLowerCase().includes(dashboardOrgSearchTerm.toLowerCase()) ||
+                        o.code.toLowerCase().includes(dashboardOrgSearchTerm.toLowerCase())
+                      )
+                      .map(o => (
+                        <option key={o.id} value={o.id}>{o.name} ({o.code})</option>
+                      ))}
+                    {organizations.filter(o => 
+                      o.name.toLowerCase().includes(dashboardOrgSearchTerm.toLowerCase()) ||
+                      o.code.toLowerCase().includes(dashboardOrgSearchTerm.toLowerCase())
+                    ).length === 0 && (
+                      <option value="">No matching tenants</option>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              {selectedDashboardOrg ? (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Organization general details */}
+                    <div className="border border-slate-900 bg-slate-900/10 p-5 rounded-2xl space-y-4">
+                      <div className="flex items-center gap-3">
+                        {selectedDashboardOrg.logo_url ? (
+                          <img src={selectedDashboardOrg.logo_url} alt="Logo" className="w-12 h-12 rounded-lg object-contain bg-slate-900 border border-slate-800" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center font-bold text-blue-400 text-base font-heading">
+                            {selectedDashboardOrg.name[0]}
+                          </div>
+                        )}
+                        <div>
+                          <h4 className="text-sm font-bold text-white">{selectedDashboardOrg.name}</h4>
+                          <span className="text-[10px] text-slate-500 block font-mono">{selectedDashboardOrg.code}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 text-xs border-t border-slate-900/60 pt-4">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500 font-semibold">Instance Status:</span>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                            selectedDashboardOrg.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                          }`}>{selectedDashboardOrg.status}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500 font-semibold">Website:</span>
+                          <a href={selectedDashboardOrg.website} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline truncate max-w-[150px]">{selectedDashboardOrg.website || 'N/A'}</a>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500 font-semibold">Primary Admin:</span>
+                          <span className="text-slate-300 font-medium">{selectedDashboardOrgAdmin ? selectedDashboardOrgAdmin.name : 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500 font-semibold">Admin Email:</span>
+                          <span className="text-slate-300 font-mono truncate max-w-[150px]">{selectedDashboardOrgAdmin ? selectedDashboardOrgAdmin.email : 'N/A'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Organization Counts */}
+                    <div className="lg:col-span-2 grid grid-cols-2 gap-4">
+                      {[
+                        { key: 'subadmins', title: 'Subadmins Registered', value: selectedDashboardOrgSubAdmins.length, label: 'Staff accounts with portal access' },
+                        { key: 'students', title: 'Students Enrolled', value: selectedDashboardOrgStudents.length, label: 'Profile cards inside tenant' },
+                        { key: 'recruiters', title: 'Recruiters Linked', value: selectedDashboardOrgRecruiters.length, label: 'Active employer accounts' },
+                        { key: 'companies', title: 'Companies Listed', value: selectedDashboardOrgCompaniesCount, label: 'Unique recruiting companies' }
+                      ].map((metric, i) => (
+                        <div 
+                          key={i} 
+                          onClick={() => setDashboardActiveMetricDetail(dashboardActiveMetricDetail === metric.key ? null : metric.key as any)}
+                          className={`border p-5 rounded-2xl cursor-pointer transition-all ${
+                            dashboardActiveMetricDetail === metric.key 
+                              ? 'border-blue-500 bg-blue-500/5 shadow-lg shadow-blue-500/5' 
+                              : 'border-slate-900 bg-slate-900/10 hover:border-slate-800'
+                          }`}
+                        >
+                          <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 block">{metric.title}</span>
+                          <div className="text-2xl font-heading font-extrabold text-white mt-2">{metric.value}</div>
+                          <span className="text-[10px] text-slate-400 mt-1 block leading-tight">{metric.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Detail table inside dashboard */}
+                  {dashboardActiveMetricDetail && (
+                    <div className="border border-slate-900 bg-slate-900/10 p-5 rounded-2xl animate-fade-in space-y-4">
+                      <div className="flex justify-between items-center pb-3 border-b border-slate-900 gap-3 flex-wrap">
+                        <div>
+                          <h4 className="text-xs font-bold text-white uppercase tracking-wider font-heading">
+                            {dashboardActiveMetricDetail === 'subadmins' && `Subadmins in ${selectedDashboardOrg.name}`}
+                            {dashboardActiveMetricDetail === 'students' && `Students Enrolled in ${selectedDashboardOrg.name}`}
+                            {dashboardActiveMetricDetail === 'recruiters' && `Recruiters Linked to ${selectedDashboardOrg.name}`}
+                            {dashboardActiveMetricDetail === 'companies' && `Companies Listed under ${selectedDashboardOrg.name}`}
+                          </h4>
+                        </div>
+                        <div className="flex items-center gap-2 ml-auto">
+                          {(dashboardActiveMetricDetail === 'subadmins' || dashboardActiveMetricDetail === 'students') && (
+                            <div className="relative">
+                              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500" />
+                              <input
+                                type="text"
+                                value={detailSearchTerm}
+                                onChange={e => setDetailSearchTerm(e.target.value)}
+                                placeholder="Search..."
+                                className="h-7 pl-7 pr-3 rounded-lg border border-slate-800 bg-slate-900 text-[10px] text-slate-200 focus:outline-none focus:border-blue-500 w-40"
+                              />
+                            </div>
+                          )}
+                          <button
+                            onClick={() => { setDashboardActiveMetricDetail(null); setDetailSearchTerm(''); }}
+                            className="h-7 px-2.5 rounded-lg border border-slate-800 bg-slate-900/50 hover:bg-slate-900 text-slate-400 hover:text-white text-[10px] font-bold transition-all"
+                          >
+                            Close Details
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                        {dashboardActiveMetricDetail === 'subadmins' && (
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-900 text-slate-500 text-[10px] font-bold uppercase tracking-wider bg-slate-900/10">
+                                <th className="p-3">Staff Member</th>
+                                <th className="p-3">Designation</th>
+                                <th className="p-3">Department</th>
+                                <th className="p-3">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-900/60 text-xs">
+                              {selectedDashboardOrgSubAdmins
+                                .filter((sa: any) => !detailSearchTerm || sa.name?.toLowerCase().includes(detailSearchTerm.toLowerCase()) || sa.email?.toLowerCase().includes(detailSearchTerm.toLowerCase()))
+                                .map((sa: any) => (
+                                <tr key={sa.id} onClick={() => { setShowSubadminModal(sa); setSubadminCredsSuccess(null); setSubadminCredsError(''); setSubadminNewPassword(''); }} className="hover:bg-blue-500/5 cursor-pointer transition-colors group">
+                                  <td className="p-3">
+                                    <div className="font-semibold text-slate-200 group-hover:text-blue-400 transition-colors">{sa.name}</div>
+                                    <div className="text-[10px] font-mono text-slate-500">{sa.email}</div>
+                                  </td>
+                                  <td className="p-3 text-slate-300">{sa.designation || 'N/A'}</td>
+                                  <td className="p-3 text-slate-300">{sa.department || 'N/A'}</td>
+                                  <td className="p-3">
+                                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${(sa.status || 'Active') === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>{sa.status || 'Active'}</span>
+                                  </td>
+                                </tr>
+                              ))}
+                              {selectedDashboardOrgSubAdmins.length === 0 && (
+                                <tr><td colSpan={4} className="p-6 text-center text-xs text-slate-500">No subadmins registered.</td></tr>
+                              )}
+                            </tbody>
+                          </table>
+                        )}
+
+                        {dashboardActiveMetricDetail === 'students' && (
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-900 text-slate-500 text-[10px] font-bold uppercase tracking-wider bg-slate-900/10">
+                                <th className="p-3">Student</th>
+                                <th className="p-3">Branch</th>
+                                <th className="p-3">Grad Year</th>
+                                <th className="p-3">CGPA</th>
+                                <th className="p-3">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-900/60 text-xs">
+                              {selectedDashboardOrgStudents
+                                .filter((s: any) => !detailSearchTerm || s.name?.toLowerCase().includes(detailSearchTerm.toLowerCase()) || s.email?.toLowerCase().includes(detailSearchTerm.toLowerCase()))
+                                .map((s: any) => (
+                                <tr key={s.id} onClick={() => { setShowStudentModal(s); setStudentCredsSuccess(null); setStudentCredsError(''); setStudentNewPassword(''); }} className="hover:bg-blue-500/5 cursor-pointer transition-colors group">
+                                  <td className="p-3">
+                                    <div className="font-semibold text-slate-200 group-hover:text-blue-400 transition-colors">{s.name || 'N/A'}</div>
+                                    <div className="text-[10px] font-mono text-slate-500">{s.email || ''}</div>
+                                  </td>
+                                  <td className="p-3 text-slate-300">{s.branch || 'N/A'}</td>
+                                  <td className="p-3 text-slate-300 font-mono">{s.graduation_year || 'N/A'}</td>
+                                  <td className="p-3 text-emerald-400 font-bold font-mono">{s.cgpa || '0.0'}</td>
+                                  <td className="p-3">
+                                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${ (s.account_status || 'Active') === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400' }`}>{s.account_status || 'Active'}</span>
+                                  </td>
+                                </tr>
+                              ))}
+                              {selectedDashboardOrgStudents.length === 0 && (
+                                <tr>
+                                  <td colSpan={5} className="p-6 text-center text-xs text-slate-500">
+                                    No students enrolled.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        )}
+
+                        {dashboardActiveMetricDetail === 'recruiters' && (
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-900 text-slate-500 text-[10px] font-bold uppercase tracking-wider bg-slate-900/10">
+                                <th className="p-3">Name</th>
+                                <th className="p-3">Email</th>
+                                <th className="p-3">Company</th>
+                                <th className="p-3">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-900/60 text-xs">
+                              {selectedDashboardOrgRecruiters.map((r: any) => (
+                                <tr
+                                  key={r.id}
+                                  onClick={() => {
+                                    setSelectedUmUser({ ...r, _type: 'recruiter', _status: r.status || 'Active' });
+                                    setUmCredsSuccess(null);
+                                    setUmCredsError('');
+                                    setUmNewPassword('');
+                                  }}
+                                  className="hover:bg-blue-500/5 cursor-pointer transition-colors group"
+                                >
+                                  <td className="p-3 font-semibold text-slate-200 group-hover:text-blue-400 transition-colors">{r.name || 'N/A'}</td>
+                                  <td className="p-3 font-mono text-slate-400">{r.email || 'N/A'}</td>
+                                  <td className="p-3 text-slate-300">{getCompanyName(r.company) || 'N/A'}</td>
+                                  <td className="p-3">
+                                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                                      (r.status || 'Active') === 'Active' || (r.status || 'Active') === 'Verified' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                                    }`}>{r.status || 'Active'}</span>
+                                  </td>
+                                </tr>
+                              ))}
+                              {selectedDashboardOrgRecruiters.length === 0 && (
+                                <tr>
+                                  <td colSpan={4} className="p-6 text-center text-xs text-slate-500">
+                                    No recruiters linked.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        )}
+
+                        {dashboardActiveMetricDetail === 'companies' && (
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-900 text-slate-500 text-[10px] font-bold uppercase tracking-wider bg-slate-900/10">
+                                <th className="p-3">Company Name</th>
+                                <th className="p-3">Jobs Offered</th>
+                                <th className="p-3">Recruiters Associated</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-900/60 text-xs">
+                              {Array.from(new Set([
+                                ...selectedDashboardOrgJobs.map(j => j.company?.trim()),
+                                ...selectedDashboardOrgRecruiters.map(r => getCompanyName(r.company))
+                              ].filter(Boolean))).map((companyName, idx) => {
+                                const companyJobsCount = selectedDashboardOrgJobs.filter(j => j.company?.trim() === companyName).length;
+                                const companyRecCount = selectedDashboardOrgRecruiters.filter(r => getCompanyName(r.company) === companyName).length;
+                                return (
+                                  <tr
+                                    key={idx}
+                                    onClick={() => {
+                                      setShowCompanyModal({ companyName, recruitersCount: companyRecCount, jobsCount: companyJobsCount });
+                                    }}
+                                    className="hover:bg-blue-500/5 cursor-pointer transition-colors group"
+                                  >
+                                    <td className="p-3 font-semibold text-slate-200 group-hover:text-blue-400 transition-colors">{companyName}</td>
+                                    <td className="p-3 text-slate-300 font-mono">{companyJobsCount}</td>
+                                    <td className="p-3 text-slate-300 font-mono">{companyRecCount}</td>
+                                  </tr>
+                                );
+                              })}
+                              {selectedDashboardOrgCompaniesCount === 0 && (
+                                <tr>
+                                  <td colSpan={3} className="p-6 text-center text-xs text-slate-500">
+                                    No companies listed.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              ) : (
+                <div className="py-8 text-center text-xs text-slate-500 border border-dashed border-slate-900 rounded-2xl">
+                  No organization selected. Please select a tenant to view metrics.
+                </div>
+              )}
             </div>
 
             {/* Acquisition Trends & Node updates */}
@@ -1308,7 +2039,7 @@ export default function App() {
         )}
 
         {/* Global Search Bar */}
-        {activeTab !== 'dashboard' && activeTab !== 'settings' && (
+        {activeTab !== 'dashboard' && activeTab !== 'settings' && activeTab !== 'analytics' && activeTab !== 'users' && (
           <div className="relative animate-fade-in">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input
@@ -1323,9 +2054,26 @@ export default function App() {
 
         {/* ─── ORGANIZATIONS TAB ──────────────────────────────────────── */}
         {activeTab === 'organizations' && (
-          <div className="space-y-6 animate-fade-in">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-white font-heading">Registered Organizations</h3>
+          <div className="space-y-6 animate-fade-in font-sans">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <h3 className="text-sm font-bold text-white font-heading">Registered Organizations</h3>
+                <div className="flex bg-slate-900/50 p-1 border border-slate-900 rounded-xl gap-1">
+                  {(['all', 'Active', 'Suspended', 'Pending'] as const).map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => setOrgStatusFilter(status)}
+                      className={`h-7 px-3 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all ${
+                        orgStatusFilter === status
+                          ? 'bg-blue-500 text-white shadow-md'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {status === 'all' ? 'All' : status}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <button
                 onClick={() => { setOrgCreateError(''); setShowCreateOrgModal(true); }}
                 className="h-9 px-4 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-blue-500/15"
@@ -1351,101 +2099,160 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-900/60 text-xs">
-                    {activeOrgsList.map(org => {
-                      const primaryAdmin = admins.find(a => a.organization_id === org.id);
-                      const orgStudents = students.filter(s => s.organization_id === org.id);
-                      const orgRecruiters = recruiters.filter(r => r.organization_id === org.id);
-                      
-                      return (
-                        <tr key={org.id} className="hover:bg-slate-900/25 transition-colors">
+                    {orgStatusFilter === 'Pending' ? (
+                      filteredPendingOrgs.map(req => (
+                        <tr 
+                          key={req.id} 
+                          onClick={() => {
+                            setSelectedRequest(req);
+                            setRemarksInput(req.remarks || '');
+                            setShowRequestDetail(true);
+                          }}
+                          className="hover:bg-slate-900/25 transition-colors cursor-pointer"
+                        >
                           <td className="p-4">
-                            {org.logo_url ? (
-                              <img src={org.logo_url} alt="Logo" className="w-8 h-8 rounded-lg object-contain bg-slate-900 border border-slate-800" />
+                            {req.logo_url ? (
+                              <img src={req.logo_url} alt="Logo" className="w-8 h-8 rounded-lg object-contain bg-slate-900 border border-slate-800" />
                             ) : (
                               <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 font-bold flex items-center justify-center text-sm font-heading">
-                                {org.name[0]}
+                                {req.organization_name[0]}
                               </div>
                             )}
                           </td>
-                          <td className="p-4 font-semibold text-slate-200">{org.name}</td>
-                          <td className="p-4 font-mono text-slate-400 font-bold">{org.code}</td>
-                          <td className="p-4">
-                            {primaryAdmin ? (
-                              <div>
-                                <span className="text-slate-300 font-medium block">{primaryAdmin.name}</span>
-                                <span className="text-[10px] text-slate-500 block font-mono">{primaryAdmin.email}</span>
-                              </div>
-                            ) : (
-                              <span className="text-slate-500">No Admin linked</span>
-                            )}
+                          <td className="p-4 font-semibold text-slate-200">
+                            <div>
+                              <span>{req.organization_name}</span>
+                              <span className="text-[10px] text-slate-500 block mt-0.5">{req.organization_type}</span>
+                            </div>
                           </td>
-                          <td className="p-4 text-slate-300 font-semibold">{orgStudents.length}</td>
-                          <td className="p-4 text-slate-300 font-semibold">{orgRecruiters.length}</td>
+                          <td className="p-4 font-mono text-slate-400 font-bold">{req.generated_org_code}</td>
                           <td className="p-4">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                              org.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/10' :
-                              'bg-red-500/10 text-red-400 border border-red-500/10'
-                            }`}>
-                              {org.status}
+                            <div>
+                              <span className="text-slate-300 font-medium block">{req.admin_name}</span>
+                              <span className="text-[10px] text-slate-500 block font-mono">{req.admin_email}</span>
+                            </div>
+                          </td>
+                          <td className="p-4 text-slate-500 font-mono">N/A</td>
+                          <td className="p-4 text-slate-500 font-mono">N/A</td>
+                          <td className="p-4">
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/10">
+                              Pending
                             </span>
                           </td>
-                          <td className="p-4 text-slate-400">{new Date(org.created_at).toLocaleDateString()}</td>
-                          <td className="p-4 text-right">
+                          <td className="p-4 text-slate-400">{new Date(req.submitted_at).toLocaleDateString()}</td>
+                          <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex gap-2 justify-end">
                               <button
-                                onClick={() => setShowViewOrgModal(org)}
-                                className="px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-bold transition-colors text-slate-300"
-                              >
-                                View
-                              </button>
-                              <button
                                 onClick={() => {
-                                  const primaryAdmin = admins.find((a: any) => a.organization_id === org.id);
-                                  setEditName(org.name);
-                                  setEditWebsite(org.website || '');
-                                  setEditAddress(org.address || '');
-                                  setEditLogoUrl(org.logo_url || '');
-                                  setEditAdminName(primaryAdmin?.name || '');
-                                  setEditAdminEmail(primaryAdmin?.email || '');
-                                  setOrgEditingError('');
-                                  setShowEditOrgModal(org);
+                                  setSelectedRequest(req);
+                                  setRemarksInput(req.remarks || '');
+                                  setShowRequestDetail(true);
                                 }}
-                                className="px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-bold transition-colors text-blue-400"
+                                className="px-2.5 py-1.5 rounded bg-blue-500 hover:bg-blue-600 text-[10px] font-bold transition-colors text-white"
                               >
-                                Edit
+                                Review Request
                               </button>
-                              <button
-                                onClick={() => handleToggleOrgStatus(org)}
-                                className={`px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-850 text-[10px] font-bold transition-colors ${
-                                  org.status === 'Active' ? 'text-yellow-500 hover:bg-yellow-500/5' : 'text-emerald-400 hover:bg-emerald-500/5'
-                                }`}
-                              >
-                                {org.status === 'Active' ? 'Suspend' : 'Activate'}
-                              </button>
-                              {primaryAdmin && (
-                                <button
-                                  onClick={() => {
-                                    setNewTempPassword(generateTempPassword());
-                                    setCredsResetError('');
-                                    setResetSuccessData(null);
-                                    setShowResetCredsModal(primaryAdmin);
-                                  }}
-                                  className="px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-bold transition-colors text-purple-400 flex items-center gap-1"
-                                  title="Reset Admin Credentials"
-                                >
-                                  <Key className="w-3.5 h-3.5" /> Credentials
-                                </button>
-                              )}
                             </div>
                           </td>
                         </tr>
-                      );
-                    })}
+                      ))
+                    ) : (
+                      activeOrgsList.map(org => {
+                        const primaryAdmin = admins.find(a => a.organization_id === org.id);
+                        const orgStudents = students.filter(s => s.organization_id === org.id);
+                        const orgRecruiters = recruiters.filter(r => r.organization_id === org.id);
+                        
+                        return (
+                          <tr 
+                            key={org.id} 
+                            onClick={() => {
+                              setShowViewOrgModal(org);
+                              setIsEditingOrgDetails(false);
+                              setEditName(org.name);
+                              setEditWebsite(org.website || '');
+                              setEditAddress(org.address || '');
+                              setEditLogoUrl(org.logo_url || '');
+                              setEditAdminName(primaryAdmin?.name || '');
+                              setEditAdminEmail(primaryAdmin?.email || '');
+                              setOrgEditingError('');
+                            }}
+                            className="hover:bg-slate-900/25 transition-colors cursor-pointer"
+                          >
+                            <td className="p-4">
+                              {org.logo_url ? (
+                                <img src={org.logo_url} alt="Logo" className="w-8 h-8 rounded-lg object-contain bg-slate-900 border border-slate-800" />
+                              ) : (
+                                <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 font-bold flex items-center justify-center text-sm font-heading">
+                                  {org.name[0]}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-4 font-semibold text-slate-200">{org.name}</td>
+                            <td className="p-4 font-mono text-slate-400 font-bold">{org.code}</td>
+                            <td className="p-4">
+                              {primaryAdmin ? (
+                                <div>
+                                  <span className="text-slate-300 font-medium block">{primaryAdmin.name}</span>
+                                  <span className="text-[10px] text-slate-500 block font-mono">{primaryAdmin.email}</span>
+                                </div>
+                              ) : (
+                                <span className="text-slate-500">No Admin linked</span>
+                              )}
+                            </td>
+                            <td className="p-4 text-slate-300 font-semibold font-mono">{orgStudents.length}</td>
+                            <td className="p-4 text-slate-300 font-semibold font-mono">{orgRecruiters.length}</td>
+                            <td className="p-4">
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                org.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/10' :
+                                'bg-red-500/10 text-red-400 border border-red-500/10'
+                              }`}>
+                                {org.status}
+                              </span>
+                            </td>
+                            <td className="p-4 text-slate-400">{new Date(org.created_at).toLocaleDateString()}</td>
+                            <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex gap-2 justify-end">
+                                <button
+                                  onClick={() => handleToggleOrgStatus(org)}
+                                  className={`px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-850 text-[10px] font-bold transition-colors ${
+                                    org.status === 'Active' ? 'text-yellow-500 hover:bg-yellow-500/5' : 'text-emerald-400 hover:bg-emerald-500/5'
+                                  }`}
+                                >
+                                  {org.status === 'Active' ? 'Suspend' : 'Activate'}
+                                </button>
+                                {primaryAdmin && (
+                                  <button
+                                    onClick={() => {
+                                      setNewTempPassword(generateTempPassword());
+                                      setCredsResetError('');
+                                      setResetSuccessData(null);
+                                      setShowResetCredsModal(primaryAdmin);
+                                    }}
+                                    className="px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-bold transition-colors text-purple-400 flex items-center gap-1"
+                                    title="Reset Admin Credentials"
+                                  >
+                                    <Key className="w-3.5 h-3.5" /> Credentials
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
 
-                    {activeOrgsList.length === 0 && (
+                    {orgStatusFilter === 'Pending' && filteredPendingOrgs.length === 0 && (
                       <tr>
                         <td colSpan={9} className="p-8 text-center text-xs text-slate-500">
-                          No organizations registered yet.
+                          No pending onboarding requests found.
+                        </td>
+                      </tr>
+                    )}
+
+                    {orgStatusFilter !== 'Pending' && activeOrgsList.length === 0 && (
+                      <tr>
+                        <td colSpan={9} className="p-8 text-center text-xs text-slate-500">
+                          No organizations registered matching search and filter options.
                         </td>
                       </tr>
                     )}
@@ -1616,6 +2423,216 @@ export default function App() {
           </div>
         )}
 
+        {/* ─── USER MANAGEMENT TAB ─────────────────────────────────────── */}
+        {activeTab === 'users' && (() => {
+          const orgAdmins     = admins.map((u: any) => ({ ...u, _type: 'admin',     _status: u.status || 'Active' }));
+          const subAdminUsers = subAdmins.map((u: any) => ({ ...u, _type: 'subadmin', _status: u.status || 'Active' }));
+          const studentUsers  = students.map((u: any) => ({ ...u, _type: 'student',  _status: u.account_status || 'Active' }));
+          const recruiterUsers = recruiters.map((u: any) => ({ ...u, _type: 'recruiter', _status: u.status || 'Active' }));
+          const allUsers = [...orgAdmins, ...subAdminUsers, ...studentUsers, ...recruiterUsers];
+
+          const filtered = allUsers.filter(u => {
+            const matchRole = umRoleFilter === 'all' || u._type === umRoleFilter;
+            const matchOrg  = umOrgFilter === 'all' || u.organization_id === umOrgFilter;
+            const q = umSearch.toLowerCase();
+            const orgName = (organizations.find((o: any) => o.id === u.organization_id)?.name || '').toLowerCase();
+            return matchRole && matchOrg && (!q || (u.name||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q) || orgName.includes(q));
+          });
+
+          type UType = 'admin'|'subadmin'|'student'|'recruiter';
+          const TC: Record<UType, { label: string; color: string; bg: string; border: string }> = {
+            admin:     { label: 'Org Admin',  color: 'text-amber-400',   bg: 'bg-amber-500/10',   border: 'border-amber-500/25' },
+            subadmin:  { label: 'Sub Admin',  color: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/25' },
+            student:   { label: 'Student',    color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/25' },
+            recruiter: { label: 'Recruiter',  color: 'text-violet-400',  bg: 'bg-violet-500/10',  border: 'border-violet-500/25' },
+          };
+
+          const FILTERS: { key: 'all'|UType; label: string }[] = [
+            { key: 'all',       label: `All (${allUsers.length})` },
+            { key: 'admin',     label: `Org Admins (${orgAdmins.length})` },
+            { key: 'subadmin',  label: `Sub Admins (${subAdminUsers.length})` },
+            { key: 'student',   label: `Students (${studentUsers.length})` },
+            { key: 'recruiter', label: `Recruiters (${recruiterUsers.length})` },
+          ];
+
+          return (
+            <div className="space-y-6 animate-fade-in font-sans">
+              {/* Search Bar (Spans full width like organizations) */}
+              <div className="relative animate-fade-in">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <input
+                  type="text"
+                  value={umSearch}
+                  onChange={(e) => setUmSearch(e.target.value)}
+                  placeholder="Search users by name, email, or organization..."
+                  className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-900 bg-slate-950 text-slate-200 text-xs focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
+                {[
+                  { title: 'Org Admins', value: orgAdmins.length, desc: 'Enterprise tenant owners', theme: TC.admin },
+                  { title: 'Sub Admins', value: subAdminUsers.length, desc: 'Platform staff accounts', theme: TC.subadmin },
+                  { title: 'Students', value: studentUsers.length, desc: 'Enrolled portal students', theme: TC.student },
+                  { title: 'Recruiters', value: recruiterUsers.length, desc: 'Active employer accounts', theme: TC.recruiter }
+                ].map((stat, idx) => (
+                  <div key={idx} className="border border-slate-900 bg-slate-900/10 p-4 rounded-2xl">
+                    <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 block">{stat.title}</span>
+                    <div className="text-2xl font-heading font-extrabold text-white mt-1.5">{stat.value}</div>
+                    <span className="text-[10px] text-slate-400 mt-1 block leading-tight">{stat.desc}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Title & Filter Pills */}
+              <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <h3 className="text-sm font-bold text-white font-heading">Registered Users</h3>
+                  
+                  {/* Role selection pills */}
+                  <div className="flex bg-slate-900/50 p-1 border border-slate-900 rounded-xl gap-1 overflow-x-auto animate-fade-in">
+                    {FILTERS.map(f => (
+                      <button
+                        key={f.key}
+                        onClick={() => { setUmRoleFilter(f.key); setSelectedUmUser(null); }}
+                        className={`h-7 px-3 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all whitespace-nowrap ${
+                          umRoleFilter === f.key
+                            ? 'bg-blue-500 text-white shadow-md'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {f.key === 'all' ? 'All' : TC[f.key]?.label || f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Organization Selection Filter */}
+                <div className="flex items-center gap-3">
+                  <select
+                    value={umOrgFilter}
+                    onChange={e => { setUmOrgFilter(e.target.value); setSelectedUmUser(null); }}
+                    className="h-9 px-3 bg-slate-950 border border-slate-900 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-blue-500 transition-colors"
+                  >
+                    <option value="all">All Organizations</option>
+                    {organizations.map((o: any) => (
+                      <option key={o.id} value={o.id}>{o.name}</option>
+                    ))}
+                  </select>
+
+                  {(umSearch || umOrgFilter !== 'all' || umRoleFilter !== 'all') && (
+                    <button
+                      onClick={() => { setUmSearch(''); setUmOrgFilter('all'); setUmRoleFilter('all'); setSelectedUmUser(null); }}
+                      className="text-xs text-blue-400 hover:underline font-bold"
+                    >
+                      Clear Filters
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Users Table */}
+              <div className="border border-slate-900 bg-slate-950 rounded-2xl overflow-hidden shadow-xl">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-900 text-slate-500 text-[10px] font-bold uppercase tracking-wider bg-slate-900/10">
+                        <th className="p-4">Avatar</th>
+                        <th className="p-4">Name</th>
+                        <th className="p-4">Email</th>
+                        <th className="p-4">Role</th>
+                        <th className="p-4">Organization</th>
+                        <th className="p-4">Status</th>
+                        <th className="p-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-900/60 text-xs">
+                      {filtered.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-xs text-slate-500">
+                            No users registered matching search and filter options.
+                          </td>
+                        </tr>
+                      ) : (
+                        filtered.map(u => {
+                          const tc = TC[u._type as UType];
+                          const orgName = organizations.find((o: any) => o.id === u.organization_id)?.name || 'Platform';
+
+                          return (
+                            <tr
+                              key={`${u._type}-${u.id}`}
+                              onClick={() => { setSelectedUmUser(u); setUmCredsSuccess(null); setUmCredsError(''); setUmNewPassword(''); }}
+                              className="hover:bg-slate-900/25 transition-colors cursor-pointer"
+                            >
+                              <td className="p-4">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-extrabold ${tc.bg} ${tc.color}`}>
+                                  {(u.name || u.email || '?').charAt(0).toUpperCase()}
+                                </div>
+                              </td>
+                              <td className="p-4 font-semibold text-slate-200">{u.name || '—'}</td>
+                              <td className="p-4 text-slate-400 font-mono">{u.email}</td>
+                              <td className="p-4">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${tc.bg} ${tc.color} ${tc.border}`}>
+                                  {tc.label}
+                                </span>
+                              </td>
+                              <td className="p-4 text-slate-300 font-semibold">{orgName}</td>
+                              <td className="p-4">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${u._status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/10' : 'bg-red-500/10 text-red-400 border border-red-500/10'}`}>
+                                  {u._status}
+                                </span>
+                              </td>
+                              <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex gap-2 justify-end">
+                                  {/* Toggle Status Action */}
+                                  {u._status === 'Active' ? (
+                                    <button
+                                      onClick={() => { setSelectedUmUser(u); handleUmStatusChange('Suspended'); }}
+                                      className="px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-850 text-[10px] font-bold transition-colors text-yellow-500 hover:bg-yellow-500/5 border border-slate-800"
+                                    >
+                                      Suspend
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => { setSelectedUmUser(u); handleUmStatusChange('Active'); }}
+                                      className="px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-850 text-[10px] font-bold transition-colors text-emerald-400 hover:bg-emerald-500/5 border border-slate-800"
+                                    >
+                                      Activate
+                                    </button>
+                                  )}
+
+                                  {/* Reset Password Modal Action */}
+                                  <button
+                                    onClick={() => { setSelectedUmUser(u); setUmCredsSuccess(null); setUmCredsError(''); setUmNewPassword(''); }}
+                                    className="px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-bold transition-colors text-purple-400 flex items-center gap-1 border border-slate-800"
+                                    title="Reset Password"
+                                  >
+                                    <Key className="w-3.5 h-3.5" /> Credentials
+                                  </button>
+
+                                  {/* Delete Action */}
+                                  <button
+                                    onClick={() => { setSelectedUmUser(u); handleUmStatusChange('__delete__'); }}
+                                    className="px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-bold transition-colors text-red-400 flex items-center gap-1 border border-slate-800"
+                                    title="Delete User"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ─── ORGANIZATION ANALYTICS TAB ─────────────────────────────── */}
         {activeTab === 'analytics' && (
           <div className="space-y-6 animate-fade-in">
@@ -1625,15 +2642,47 @@ export default function App() {
                 <p className="text-[10px] text-slate-500 mt-0.5">Inspect metrics scoped to a specific organization.</p>
               </div>
 
-              <select
-                value={selectedAnalyticsOrgId}
-                onChange={(e) => setSelectedAnalyticsOrgId(e.target.value)}
-                className="h-9 px-3 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-200 focus:outline-none"
-              >
-                {organizations.map(o => (
-                  <option key={o.id} value={o.id}>{o.name} ({o.code})</option>
-                ))}
-              </select>
+              <div className="flex items-center gap-3">
+                {/* Search bar */}
+                <div className="relative font-sans">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Search tenant..."
+                    value={analyticsOrgSearchTerm}
+                    onChange={(e) => {
+                      setAnalyticsOrgSearchTerm(e.target.value);
+                      setActiveMetricDetail(null);
+                    }}
+                    className="h-9 pl-9 pr-3 rounded-xl border border-slate-900 bg-slate-900/30 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors w-44 md:w-56"
+                  />
+                </div>
+
+                {/* Dropdown select */}
+                <select
+                  value={selectedAnalyticsOrgId}
+                  onChange={(e) => {
+                    setSelectedAnalyticsOrgId(e.target.value);
+                    setActiveMetricDetail(null);
+                  }}
+                  className="h-9 px-3 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-200 focus:outline-none"
+                >
+                  {organizations
+                    .filter(o => 
+                      o.name.toLowerCase().includes(analyticsOrgSearchTerm.toLowerCase()) ||
+                      o.code.toLowerCase().includes(analyticsOrgSearchTerm.toLowerCase())
+                    )
+                    .map(o => (
+                      <option key={o.id} value={o.id}>{o.name} ({o.code})</option>
+                    ))}
+                  {organizations.filter(o => 
+                    o.name.toLowerCase().includes(analyticsOrgSearchTerm.toLowerCase()) ||
+                    o.code.toLowerCase().includes(analyticsOrgSearchTerm.toLowerCase())
+                  ).length === 0 && (
+                    <option value="">No matching tenants</option>
+                  )}
+                </select>
+              </div>
             </div>
 
             {selectedOrg ? (
@@ -1707,7 +2756,7 @@ export default function App() {
                 {/* Metric Detail Table */}
                 {activeMetricDetail && (
                   <div className="border border-slate-900 bg-slate-950 p-6 rounded-2xl animate-fade-in space-y-4">
-                    <div className="flex justify-between items-center pb-3 border-b border-slate-900">
+                    <div className="flex justify-between items-center pb-3 border-b border-slate-900 gap-3 flex-wrap">
                       <div>
                         <h4 className="text-sm font-bold text-white uppercase tracking-wider font-heading">
                           {activeMetricDetail === 'subadmins' && `Subadmins in ${selectedOrg.name}`}
@@ -1722,12 +2771,26 @@ export default function App() {
                           {activeMetricDetail === 'companies' && 'List of recruiting companies active inside this tenant.'}
                         </p>
                       </div>
-                      <button
-                        onClick={() => setActiveMetricDetail(null)}
-                        className="h-8 px-3 rounded-lg border border-slate-800 bg-slate-900/50 hover:bg-slate-900 text-slate-400 hover:text-white text-xs font-bold transition-all"
-                      >
-                        Close Details
-                      </button>
+                      <div className="flex items-center gap-2 ml-auto">
+                        {(activeMetricDetail === 'subadmins' || activeMetricDetail === 'students') && (
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                            <input
+                              type="text"
+                              value={detailSearchTerm}
+                              onChange={e => setDetailSearchTerm(e.target.value)}
+                              placeholder="Search..."
+                              className="h-8 pl-8 pr-3 rounded-lg border border-slate-800 bg-slate-900 text-xs text-slate-200 focus:outline-none focus:border-blue-500 w-44"
+                            />
+                          </div>
+                        )}
+                        <button
+                          onClick={() => { setActiveMetricDetail(null); setDetailSearchTerm(''); }}
+                          className="h-8 px-3 rounded-lg border border-slate-800 bg-slate-900/50 hover:bg-slate-900 text-slate-400 hover:text-white text-xs font-bold transition-all"
+                        >
+                          Close Details
+                        </button>
+                      </div>
                     </div>
 
                     <div className="overflow-x-auto">
@@ -1735,33 +2798,34 @@ export default function App() {
                         <table className="w-full text-left border-collapse">
                           <thead>
                             <tr className="border-b border-slate-900 text-slate-500 text-[10px] font-bold uppercase tracking-wider bg-slate-900/10">
-                              <th className="p-3">Name</th>
-                              <th className="p-3">Email</th>
+                              <th className="p-3">Staff Member</th>
                               <th className="p-3">Designation</th>
                               <th className="p-3">Department</th>
                               <th className="p-3">Role</th>
+                              <th className="p-3">Status</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-900/60 text-xs">
-                            {selectedOrgSubAdmins.map((sa: any) => (
-                              <tr key={sa.id} className="hover:bg-slate-900/25 transition-colors">
-                                <td className="p-3 font-semibold text-slate-200">{sa.name}</td>
-                                <td className="p-3 font-mono text-slate-400">{sa.email}</td>
+                            {selectedOrgSubAdmins
+                              .filter((sa: any) => !detailSearchTerm || sa.name?.toLowerCase().includes(detailSearchTerm.toLowerCase()) || sa.email?.toLowerCase().includes(detailSearchTerm.toLowerCase()))
+                              .map((sa: any) => (
+                              <tr key={sa.id} onClick={() => { setShowSubadminModal(sa); setSubadminCredsSuccess(null); setSubadminCredsError(''); setSubadminNewPassword(''); }} className="hover:bg-blue-500/5 cursor-pointer transition-colors group">
+                                <td className="p-3">
+                                  <div className="font-semibold text-slate-200 group-hover:text-blue-400 transition-colors">{sa.name}</div>
+                                  <div className="text-[10px] font-mono text-slate-500">{sa.email}</div>
+                                </td>
                                 <td className="p-3 text-slate-300">{sa.designation || 'N/A'}</td>
                                 <td className="p-3 text-slate-300">{sa.department || 'N/A'}</td>
                                 <td className="p-3">
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/10">
-                                    {sa.role}
-                                  </span>
+                                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${formatRole(sa.role).bg} ${formatRole(sa.role).color} ${formatRole(sa.role).border}`}>{formatRole(sa.role).label}</span>
+                                </td>
+                                <td className="p-3">
+                                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${(sa.status || 'Active') === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>{sa.status || 'Active'}</span>
                                 </td>
                               </tr>
                             ))}
                             {selectedOrgSubAdmins.length === 0 && (
-                              <tr>
-                                <td colSpan={5} className="p-8 text-center text-xs text-slate-500">
-                                  No subadmins registered for this organization.
-                                </td>
-                              </tr>
+                              <tr><td colSpan={5} className="p-8 text-center text-xs text-slate-500">No subadmins registered for this organization.</td></tr>
                             )}
                           </tbody>
                         </table>
@@ -1771,21 +2835,28 @@ export default function App() {
                         <table className="w-full text-left border-collapse">
                           <thead>
                             <tr className="border-b border-slate-900 text-slate-500 text-[10px] font-bold uppercase tracking-wider bg-slate-900/10">
-                              <th className="p-3">Name</th>
-                              <th className="p-3">Email</th>
+                              <th className="p-3">Student</th>
                               <th className="p-3">Branch</th>
-                              <th className="p-3">Graduation Year</th>
+                              <th className="p-3">Grad Year</th>
                               <th className="p-3">CGPA</th>
+                              <th className="p-3">Status</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-900/60 text-xs">
-                            {selectedOrgStudents.map((s: any) => (
-                              <tr key={s.id} className="hover:bg-slate-900/25 transition-colors">
-                                <td className="p-3 font-semibold text-slate-200">{s.name || 'N/A'}</td>
-                                <td className="p-3 font-mono text-slate-400">{s.email || 'N/A'}</td>
+                            {selectedOrgStudents
+                              .filter((s: any) => !detailSearchTerm || s.name?.toLowerCase().includes(detailSearchTerm.toLowerCase()) || s.email?.toLowerCase().includes(detailSearchTerm.toLowerCase()))
+                              .map((s: any) => (
+                              <tr key={s.id} onClick={() => { setShowStudentModal(s); setStudentCredsSuccess(null); setStudentCredsError(''); setStudentNewPassword(''); }} className="hover:bg-blue-500/5 cursor-pointer transition-colors group">
+                                <td className="p-3">
+                                  <div className="font-semibold text-slate-200 group-hover:text-blue-400 transition-colors">{s.name || 'N/A'}</div>
+                                  <div className="text-[10px] font-mono text-slate-500">{s.email || ''}</div>
+                                </td>
                                 <td className="p-3 text-slate-300">{s.branch || 'N/A'}</td>
                                 <td className="p-3 text-slate-300 font-mono">{s.graduation_year || 'N/A'}</td>
                                 <td className="p-3 text-emerald-400 font-bold font-mono">{s.cgpa || '0.0'}</td>
+                                <td className="p-3">
+                                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${ (s.account_status || 'Active') === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400' }`}>{s.account_status || 'Active'}</span>
+                                </td>
                               </tr>
                             ))}
                             {selectedOrgStudents.length === 0 && (
@@ -1810,10 +2881,19 @@ export default function App() {
                           </thead>
                           <tbody className="divide-y divide-slate-900/60 text-xs">
                             {selectedOrgRecruiters.map((r: any) => (
-                              <tr key={r.id} className="hover:bg-slate-900/25 transition-colors">
-                                <td className="p-3 font-semibold text-slate-200">{r.name || 'N/A'}</td>
+                              <tr
+                                key={r.id}
+                                onClick={() => {
+                                  setSelectedUmUser({ ...r, _type: 'recruiter', _status: r.status || 'Active' });
+                                  setUmCredsSuccess(null);
+                                  setUmCredsError('');
+                                  setUmNewPassword('');
+                                }}
+                                className="hover:bg-blue-500/5 cursor-pointer transition-colors group"
+                              >
+                                <td className="p-3 font-semibold text-slate-200 group-hover:text-blue-400 transition-colors">{r.name || 'N/A'}</td>
                                 <td className="p-3 font-mono text-slate-400">{r.email || 'N/A'}</td>
-                                <td className="p-3 text-slate-300 font-bold">{r.company || 'N/A'}</td>
+                                <td className="p-3 text-slate-300 font-bold">{getCompanyName(r.company) || 'N/A'}</td>
                               </tr>
                             ))}
                             {selectedOrgRecruiters.length === 0 && (
@@ -1839,13 +2919,19 @@ export default function App() {
                           <tbody className="divide-y divide-slate-900/60 text-xs">
                             {Array.from(new Set([
                               ...selectedOrgJobs.map((j: any) => j.company?.trim()),
-                              ...selectedOrgRecruiters.map((r: any) => r.company?.trim())
+                              ...selectedOrgRecruiters.map((r: any) => getCompanyName(r.company))
                             ].filter(Boolean))).map((companyName: string, idx: number) => {
-                              const recruitersCount = selectedOrgRecruiters.filter((r: any) => r.company?.trim() === companyName).length;
+                              const recruitersCount = selectedOrgRecruiters.filter((r: any) => getCompanyName(r.company) === companyName).length;
                               const jobsCount = selectedOrgJobs.filter((j: any) => j.company?.trim() === companyName).length;
                               return (
-                                <tr key={idx} className="hover:bg-slate-900/25 transition-colors">
-                                  <td className="p-3 font-bold text-slate-200">{companyName}</td>
+                                <tr
+                                  key={idx}
+                                  onClick={() => {
+                                    setShowCompanyModal({ companyName, recruitersCount, jobsCount });
+                                  }}
+                                  className="hover:bg-blue-500/5 cursor-pointer transition-colors group"
+                                >
+                                  <td className="p-3 font-bold text-slate-200 group-hover:text-blue-400 transition-colors">{companyName}</td>
                                   <td className="p-3 text-slate-300 font-mono">{recruitersCount} recruiters</td>
                                   <td className="p-3 text-blue-400 font-mono font-bold">{jobsCount} postings</td>
                                 </tr>
@@ -1853,7 +2939,7 @@ export default function App() {
                             })}
                             {Array.from(new Set([
                               ...selectedOrgJobs.map((j: any) => j.company?.trim()),
-                              ...selectedOrgRecruiters.map((r: any) => r.company?.trim())
+                              ...selectedOrgRecruiters.map((r: any) => getCompanyName(r.company))
                             ].filter(Boolean))).length === 0 && (
                               <tr>
                                 <td colSpan={3} className="p-8 text-center text-xs text-slate-500">
@@ -1987,7 +3073,7 @@ export default function App() {
                   <button
                     onClick={() => handleSaveSettings('maintenance_mode', !settings.maintenance_mode)}
                     className={`h-8 px-4 rounded-lg text-xs font-bold transition-all ${
-                      settings.maintenance_mode ? 'bg-red-650 hover:bg-red-700 text-white' : 'bg-slate-900 hover:bg-slate-800 text-slate-300'
+                      settings.maintenance_mode ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-red-600 hover:bg-red-700 text-white'
                     }`}
                   >
                     {settings.maintenance_mode ? 'ON (Lockout)' : 'OFF'}
@@ -2152,7 +3238,13 @@ export default function App() {
               <div className="p-6 border-t border-slate-900 bg-slate-900/10 flex gap-3">
                 <button
                   type="button"
-                  onClick={() => handleApprovePendingRequest(selectedRequest)}
+                  onClick={() => {
+                    setSubscriptionRequest(selectedRequest);
+                    setSubType('Trial');
+                    setSubMonths(1);
+                    setSubConfirmVerified(false);
+                    setShowSubscriptionModal(true);
+                  }}
                   disabled={actionLoading}
                   className="flex-1 h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
                 >
@@ -2339,107 +3431,260 @@ export default function App() {
       )}
 
       {/* ─── EDIT ORGANIZATION MODAL ───────────────────────────────────── */}
-      {showEditOrgModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans">
-          <div className="w-full max-w-lg border border-slate-800 bg-slate-950 p-6 rounded-2xl relative animate-scale-in shadow-2xl">
-            <button
-              onClick={() => setShowEditOrgModal(null)}
-              className="absolute top-4 right-4 p-1.5 text-slate-500 hover:text-white rounded-lg transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
 
-            <div className="flex items-center gap-2 mb-4">
-              <Edit2 className="w-5 h-5 text-blue-500" />
-              <h3 className="text-sm font-bold text-white font-heading">Edit Tenant details: {showEditOrgModal.code}</h3>
+
+      {/* ─── SUBADMIN MANAGEMENT MODAL ───────────────────────────────────── */}
+      {showSubadminModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans">
+          <div className="w-full max-w-lg border border-slate-800 bg-slate-950 rounded-2xl relative animate-scale-in shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="flex items-start justify-between p-6 pb-4 border-b border-slate-900">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 font-bold text-sm">
+                  {(showSubadminModal.name || 'S').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white font-heading leading-tight">{showSubadminModal.name || 'Unknown Staff'}</h3>
+                  <p className="text-[11px] font-mono text-slate-500 mt-0.5">{showSubadminModal.email}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${(showSubadminModal.status || 'Active') === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                  {showSubadminModal.status || 'Active'}
+                </span>
+                <button onClick={() => { setShowSubadminModal(null); setSubadminCredsSuccess(null); setSubadminCredsError(''); setSubadminNewPassword(''); }} className="p-1.5 text-slate-500 hover:text-white rounded-lg transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            <form onSubmit={handleEditOrganization} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400">Organization Name *</label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={e => setEditName(e.target.value)}
-                  className="w-full h-10 px-3 border border-slate-800 bg-slate-900/40 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                  required
-                />
+            {/* Info Strip */}
+            <div className="grid grid-cols-3 gap-0 border-b border-slate-900 text-center">
+              <div className="py-3 px-2 border-r border-slate-900">
+                <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Designation</p>
+                <p className="text-xs font-bold text-slate-200 mt-0.5">{showSubadminModal.designation || 'N/A'}</p>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400">Website URL</label>
-                  <input
-                    type="url"
-                    value={editWebsite}
-                    onChange={e => setEditWebsite(e.target.value)}
-                    className="w-full h-10 px-3 border border-slate-800 bg-slate-900/40 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                  />
+              <div className="py-3 px-2 border-r border-slate-900">
+                <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Department</p>
+                <p className="text-xs font-bold text-slate-200 mt-0.5">{showSubadminModal.department || 'N/A'}</p>
+              </div>
+                <div className="py-3 px-2">
+                  <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Role</p>
+                  <span className={`inline-flex items-center mt-1 px-2.5 py-1 rounded-lg text-[10px] font-bold border ${formatRole(showSubadminModal.role).bg} ${formatRole(showSubadminModal.role).color} ${formatRole(showSubadminModal.role).border}`}>
+                    {formatRole(showSubadminModal.role).label}
+                  </span>
                 </div>
+            </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400">Location Address</label>
-                  <input
-                    type="text"
-                    value={editAddress}
-                    onChange={e => setEditAddress(e.target.value)}
-                    className="w-full h-10 px-3 border border-slate-800 bg-slate-900/40 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                  />
+            <div className="p-6 space-y-5">
+              {/* ── Credentials ─────────────────────── */}
+              <div className="border border-slate-800 rounded-xl overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 bg-purple-500/5 border-b border-slate-800">
+                  <Key className="w-4 h-4 text-purple-400" />
+                  <span className="text-xs font-bold text-white">Reset Password</span>
                 </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400">Logo Image URL</label>
-                <input
-                  type="text"
-                  value={editLogoUrl}
-                  onChange={e => setEditLogoUrl(e.target.value)}
-                  className="w-full h-10 px-3 border border-slate-800 bg-slate-900/40 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              {/* Admin Credentials Section */}
-              <div className="border-t border-slate-900/80 pt-4">
-                <h4 className="text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-3">Primary Admin Account</h4>
-                <p className="text-[10px] text-slate-500 mb-3">Update the primary administrator's display name or email address. To change the password, use the Credentials button on the organizations table.</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400">Admin Name</label>
-                    <input
-                      type="text"
-                      value={editAdminName}
-                      onChange={e => setEditAdminName(e.target.value)}
-                      placeholder="Administrator name"
-                      className="w-full h-10 px-3 border border-slate-800 bg-slate-900/40 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400">Admin Email</label>
-                    <input
-                      type="email"
-                      value={editAdminEmail}
-                      onChange={e => setEditAdminEmail(e.target.value)}
-                      placeholder="admin@university.edu"
-                      className="w-full h-10 px-3 border border-slate-800 bg-slate-900/40 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
+                <div className="p-4">
+                  {subadminCredsSuccess ? (
+                    <div className="space-y-3 text-center">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
+                        <Check className="w-4 h-4" />
+                      </div>
+                      <p className="text-[11px] text-slate-400">Password updated. Copy the credentials below.</p>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg space-y-1 text-xs font-mono text-left">
+                        <div>Email: <span className="text-white select-all">{subadminCredsSuccess.email}</span></div>
+                        <div>Password: <span className="text-white select-all">{subadminCredsSuccess.pass}</span></div>
+                      </div>
+                      <button onClick={() => setSubadminCredsSuccess(null)} className="text-[11px] text-purple-400 hover:underline">Reset another</button>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSubadminResetPassword} className="space-y-3">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={subadminNewPassword}
+                          onChange={e => setSubadminNewPassword(e.target.value)}
+                          placeholder="New password..."
+                          className="flex-1 h-9 px-3 border border-slate-800 bg-slate-900/50 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-purple-500"
+                        />
+                        <button type="button" onClick={() => setSubadminNewPassword(generateTempPassword())} className="px-3 h-9 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 rounded-lg text-purple-400 transition-colors whitespace-nowrap">
+                          Generate
+                        </button>
+                      </div>
+                      {subadminCredsError && <p className="text-[10px] text-red-400">⚠️ {subadminCredsError}</p>}
+                      <button type="submit" disabled={subadminCredsResetting} className="w-full h-9 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2">
+                        {subadminCredsResetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Key className="w-3.5 h-3.5" />}
+                        {subadminCredsResetting ? 'Updating...' : 'Set Password'}
+                      </button>
+                    </form>
+                  )}
                 </div>
               </div>
 
-              {orgEditingError && (
-                <div className="p-3 bg-red-950/20 border border-red-900/50 rounded-xl text-xs text-red-400">
-                  ⚠️ {orgEditingError}
+              {/* ── Account Control ─────────────────── */}
+              <div className="border border-slate-800 rounded-xl overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 bg-slate-900/40 border-b border-slate-800">
+                  <Lock className="w-4 h-4 text-slate-400" />
+                  <span className="text-xs font-bold text-white">Account Control</span>
                 </div>
-              )}
+                <div className="p-4 space-y-2">
+                  {(showSubadminModal.status || 'Active') === 'Active' ? (
+                    <button
+                      onClick={() => handleSubadminStatusChange('Suspended')}
+                      disabled={subadminStatusUpdating}
+                      className="w-full h-9 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2"
+                    >
+                      {subadminStatusUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                      Suspend Account
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleSubadminStatusChange('Active')}
+                      disabled={subadminStatusUpdating}
+                      className="w-full h-9 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2"
+                    >
+                      {subadminStatusUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      Activate Account
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleSubadminStatusChange('__delete__')}
+                    disabled={subadminStatusUpdating}
+                    className="w-full h-9 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2"
+                  >
+                    {subadminStatusUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                    Delete Account Permanently
+                  </button>
+                  <p className="text-[9px] text-slate-600 text-center pt-1">Suspended staff members cannot log in. Deletion is irreversible.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
-              <button
-                type="submit"
-                disabled={orgEditing}
-                className="w-full h-11 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl text-xs transition-colors flex items-center justify-center gap-2 mt-4"
-              >
-                {orgEditing ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Changes'}
-              </button>
-            </form>
+      {/* ─── STUDENT MANAGEMENT MODAL ────────────────────────────────────── */}
+      {showStudentModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans">
+          <div className="w-full max-w-lg border border-slate-800 bg-slate-950 rounded-2xl relative animate-scale-in shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="flex items-start justify-between p-6 pb-4 border-b border-slate-900">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 font-bold text-sm">
+                  {(showStudentModal.name || 'S').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white font-heading leading-tight">{showStudentModal.name || 'Unknown Student'}</h3>
+                  <p className="text-[11px] font-mono text-slate-500 mt-0.5">{showStudentModal.email}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${(showStudentModal.account_status || 'Active') === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                  {showStudentModal.account_status || 'Active'}
+                </span>
+                <button onClick={() => { setShowStudentModal(null); setStudentCredsSuccess(null); setStudentCredsError(''); setStudentNewPassword(''); }} className="p-1.5 text-slate-500 hover:text-white rounded-lg transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Info Strip */}
+            <div className="grid grid-cols-3 gap-0 border-b border-slate-900 text-center">
+              <div className="py-3 px-2 border-r border-slate-900">
+                <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Branch</p>
+                <p className="text-xs font-bold text-slate-200 mt-0.5">{showStudentModal.branch || 'N/A'}</p>
+              </div>
+              <div className="py-3 px-2 border-r border-slate-900">
+                <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Grad Year</p>
+                <p className="text-xs font-bold text-slate-200 mt-0.5">{showStudentModal.graduation_year || 'N/A'}</p>
+              </div>
+              <div className="py-3 px-2">
+                <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">CGPA</p>
+                <p className="text-xs font-bold text-emerald-400 mt-0.5">{showStudentModal.cgpa || '0.0'}</p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* ── Column 1: Credentials ─────────────────────── */}
+              <div className="border border-slate-800 rounded-xl overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 bg-purple-500/5 border-b border-slate-800">
+                  <Key className="w-4 h-4 text-purple-400" />
+                  <span className="text-xs font-bold text-white">Reset Password</span>
+                </div>
+                <div className="p-4">
+                  {studentCredsSuccess ? (
+                    <div className="space-y-3 text-center">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
+                        <Check className="w-4 h-4" />
+                      </div>
+                      <p className="text-[11px] text-slate-400">Password updated. Copy the credentials below.</p>
+                      <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg space-y-1 text-xs font-mono text-left">
+                        <div>Email: <span className="text-white select-all">{studentCredsSuccess.email}</span></div>
+                        <div>Password: <span className="text-white select-all">{studentCredsSuccess.pass}</span></div>
+                      </div>
+                      <button onClick={() => setStudentCredsSuccess(null)} className="text-[11px] text-purple-400 hover:underline">Reset another</button>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleStudentResetPassword} className="space-y-3">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={studentNewPassword}
+                          onChange={e => setStudentNewPassword(e.target.value)}
+                          placeholder="New password..."
+                          className="flex-1 h-9 px-3 border border-slate-800 bg-slate-900/50 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-purple-500"
+                        />
+                        <button type="button" onClick={() => setStudentNewPassword(generateTempPassword())} className="px-3 h-9 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 rounded-lg text-purple-400 transition-colors whitespace-nowrap">
+                          Generate
+                        </button>
+                      </div>
+                      {studentCredsError && <p className="text-[10px] text-red-400">⚠️ {studentCredsError}</p>}
+                      <button type="submit" disabled={studentCredsResetting} className="w-full h-9 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2">
+                        {studentCredsResetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Key className="w-3.5 h-3.5" />}
+                        {studentCredsResetting ? 'Updating...' : 'Set Password'}
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Column 2: Account Control ─────────────────── */}
+              <div className="border border-slate-800 rounded-xl overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 bg-slate-900/40 border-b border-slate-800">
+                  <Lock className="w-4 h-4 text-slate-400" />
+                  <span className="text-xs font-bold text-white">Account Control</span>
+                </div>
+                <div className="p-4 space-y-2">
+                  {(showStudentModal.account_status || 'Active') === 'Active' ? (
+                    <button
+                      onClick={() => handleStudentStatusChange('Suspended')}
+                      disabled={studentStatusUpdating}
+                      className="w-full h-9 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2"
+                    >
+                      {studentStatusUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                      Suspend Account
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleStudentStatusChange('Active')}
+                      disabled={studentStatusUpdating}
+                      className="w-full h-9 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2"
+                    >
+                      {studentStatusUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      Activate Account
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleStudentStatusChange('__delete__')}
+                    disabled={studentStatusUpdating}
+                    className="w-full h-9 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2"
+                  >
+                    {studentStatusUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                    Delete Account Permanently
+                  </button>
+                  <p className="text-[9px] text-slate-600 text-center pt-1">Suspended students cannot log in. Deletion is irreversible.</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -2531,76 +3776,532 @@ export default function App() {
       )}
 
       {/* ─── VIEW ORGANIZATION DETAILS MODAL ───────────────────────────── */}
-      {showViewOrgModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans">
-          <div className="w-full max-w-lg border border-slate-800 bg-slate-950 p-6 rounded-2xl relative animate-scale-in shadow-2xl">
+      {showViewOrgModal && (() => {
+        const subType = showViewOrgModal.subscription_type || 'Trial';
+        const subStatus = showViewOrgModal.subscription_status || 'Active';
+        const subStart = showViewOrgModal.subscription_start_date;
+        const subEnd = showViewOrgModal.subscription_end_date;
+        const daysRemaining = subEnd ? Math.ceil((new Date(subEnd).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null;
+
+        const startDateStr = subStart ? new Date(subStart).toLocaleDateString() : 'N/A';
+        const endDateStr = subType === 'Lifetime' ? 'No Expiry' : (subEnd ? new Date(subEnd).toLocaleDateString() : 'N/A');
+        const remainingStr = subType === 'Lifetime' ? 'Unlimited' : (daysRemaining !== null ? (daysRemaining <= 0 ? 'Expired' : `${daysRemaining} Days`) : 'N/A');
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans text-slate-300">
+            <div className="w-full max-w-lg border border-slate-800 bg-slate-950 p-6 rounded-2xl relative animate-scale-in shadow-2xl space-y-4">
+              <button
+                onClick={() => {
+                  setShowViewOrgModal(null);
+                  setEditingOrgSubId(null);
+                }}
+                className="absolute top-4 right-4 p-1.5 text-slate-500 hover:text-white rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-center gap-2 mb-2">
+                <Building2 className="w-5 h-5 text-blue-500" />
+                <h3 className="text-sm font-bold text-white font-heading">Organization File Summary</h3>
+              </div>
+
+              <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+                {isEditingOrgDetails ? (
+                  /* Edit Details Form */
+                  <div className="space-y-4 pt-1 animate-fade-in text-xs font-sans">
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Organization Name</label>
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="w-full h-9 px-3 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500 text-xs"
+                          placeholder="e.g. Sharda University"
+                        />
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Website URL</label>
+                          <input
+                            type="text"
+                            value={editWebsite}
+                            onChange={(e) => setEditWebsite(e.target.value)}
+                            className="w-full h-9 px-3 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500 text-xs"
+                            placeholder="e.g. https://sharda.ac.in"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Logo URL</label>
+                          <input
+                            type="text"
+                            value={editLogoUrl}
+                            onChange={(e) => setEditLogoUrl(e.target.value)}
+                            className="w-full h-9 px-3 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500 text-xs"
+                            placeholder="Logo Image Link"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Address</label>
+                        <textarea
+                          value={editAddress}
+                          onChange={(e) => setEditAddress(e.target.value)}
+                          rows={2}
+                          className="w-full p-3 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500 text-xs resize-none"
+                          placeholder="Organization physical address"
+                        />
+                      </div>
+
+                      <div className="border-t border-slate-900/60 my-2 pt-3 space-y-3">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Primary Admin Details</span>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Admin Name</label>
+                            <input
+                              type="text"
+                              value={editAdminName}
+                              onChange={(e) => setEditAdminName(e.target.value)}
+                              className="w-full h-9 px-3 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500 text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Admin Email</label>
+                            <input
+                              type="text"
+                              value={editAdminEmail}
+                              onChange={(e) => setEditAdminEmail(e.target.value)}
+                              className="w-full h-9 px-3 bg-slate-900/40 border border-slate-800 rounded-xl text-slate-200 focus:outline-none focus:border-blue-500 text-xs"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {orgEditingError && (
+                      <div className="p-3 bg-red-950/20 border border-red-900/50 rounded-xl text-xs text-red-400">
+                        ⚠️ {orgEditingError}
+                      </div>
+                    )}
+
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingOrgDetails(false)}
+                        className="flex-1 h-9 border border-slate-800 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-white rounded-xl text-xs font-bold transition-all"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={orgEditing}
+                        onClick={() => handleEditOrganization(showViewOrgModal.id)}
+                        className="flex-1 h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                      >
+                        {orgEditing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                        Save Details
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Static View & Control panel */
+                  <div className="space-y-4">
+                    {/* Logo & Basic Info */}
+                    <div className="flex items-center justify-between p-3.5 bg-slate-900/40 border border-slate-900 rounded-xl">
+                      <div className="flex items-center gap-3">
+                        {showViewOrgModal.logo_url ? (
+                          <img src={showViewOrgModal.logo_url} alt="Logo" className="w-12 h-12 rounded-lg object-contain bg-slate-950 border border-slate-800" />
+                        ) : (
+                          <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center font-bold text-blue-400 text-base font-heading">
+                            {showViewOrgModal.name[0]}
+                          </div>
+                        )}
+                        <div>
+                          <h4 className="text-sm font-bold text-white">{showViewOrgModal.name}</h4>
+                          <span className="text-[10px] text-slate-500 block font-mono">Code: {showViewOrgModal.code}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingOrgDetails(true)}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-[10px] font-bold text-blue-450 hover:text-white transition-colors"
+                      >
+                        Edit Details
+                      </button>
+                    </div>
+
+                    {/* Info Grid */}
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div className="p-3 border border-slate-900 rounded-xl bg-slate-900/10 space-y-1">
+                        <span className="text-[10px] text-slate-500 font-bold block uppercase">Instance Status</span>
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                          showViewOrgModal.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                        }`}>{showViewOrgModal.status}</span>
+                      </div>
+
+                      <div className="p-3 border border-slate-900 rounded-xl bg-slate-900/10 space-y-1">
+                        <span className="text-[10px] text-slate-500 font-bold block uppercase">Enrolled Students</span>
+                        <span className="text-white font-bold">{students.filter(s => s.organization_id === showViewOrgModal.id).length}</span>
+                      </div>
+
+                      <div className="p-3 border border-slate-900 rounded-xl bg-slate-900/10 space-y-1">
+                        <span className="text-[10px] text-slate-500 font-bold block uppercase">Website</span>
+                        {showViewOrgModal.website ? (
+                          <a href={showViewOrgModal.website} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline truncate block">{showViewOrgModal.website}</a>
+                        ) : (
+                          <span className="text-slate-500">N/A</span>
+                        )}
+                      </div>
+
+                      <div className="p-3 border border-slate-900 rounded-xl bg-slate-900/10 space-y-1">
+                        <span className="text-[10px] text-slate-500 font-bold block uppercase">Address</span>
+                        <span className="text-slate-300 truncate block">{showViewOrgModal.address || 'N/A'}</span>
+                      </div>
+                    </div>
+
+                    {/* Primary Admin account */}
+                    <div className="p-4 border border-slate-900 rounded-xl bg-slate-900/10 space-y-2">
+                      <span className="text-[10px] text-slate-500 font-bold block uppercase">Primary Admin Account</span>
+                      {admins.find(a => a.organization_id === showViewOrgModal.id) ? (
+                        <div className="space-y-1 text-xs">
+                          <div>Name: <span className="text-slate-200 font-medium">{admins.find(a => a.organization_id === showViewOrgModal.id).name}</span></div>
+                          <div>Email: <span className="text-slate-200 font-mono">{admins.find(a => a.organization_id === showViewOrgModal.id).email}</span></div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-500">No primary administrator linked to this tenant organization.</span>
+                      )}
+                    </div>
+
+                    {/* Subscription Details Node */}
+                    <div className="p-4 border border-slate-900 rounded-xl bg-slate-900/10 space-y-3">
+                      <div className="flex justify-between items-center border-b border-slate-900 pb-2">
+                        <span className="text-[10px] text-slate-500 font-bold uppercase">Subscription Details</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                          subStatus === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25' :
+                          subStatus === 'Expired' ? 'bg-red-500/10 text-red-400 border border-red-500/25 shadow-lg shadow-red-500/5' :
+                          'bg-amber-500/10 text-amber-400 border border-amber-500/25'
+                        }`}>
+                          {subStatus}
+                        </span>
+                      </div>
+
+                      {editingOrgSubId === showViewOrgModal.id ? (
+                        /* Plan Editing Form */
+                        <div className="space-y-4 pt-1 animate-fade-in">
+                          <div className="space-y-2">
+                            <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wide block">Plan Type</label>
+                            <div className="grid grid-cols-3 gap-2">
+                              {['Trial', 'Monthly', 'Lifetime'].map((plan) => (
+                                <button
+                                  key={plan}
+                                  type="button"
+                                  onClick={() => setEditSubType(plan as any)}
+                                  className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all text-center ${
+                                    editSubType === plan
+                                      ? 'border-blue-500 bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                                      : 'border-slate-800 bg-slate-950 text-slate-400'
+                                  }`}
+                                >
+                                  {plan}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {editSubType === 'Monthly' && (
+                            <div className="space-y-2">
+                              <label className="text-[9px] uppercase font-bold text-slate-400 tracking-wide block">Duration (Months)</label>
+                              <div className="grid grid-cols-4 gap-2">
+                                {[1, 3, 6, 12].map((m) => (
+                                  <button
+                                    key={m}
+                                    type="button"
+                                    onClick={() => setEditSubMonths(m)}
+                                    className={`py-1 px-2 rounded-md text-xs font-bold border transition-all text-center ${
+                                      editSubMonths === m
+                                        ? 'border-blue-500 bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                                        : 'border-slate-800 bg-slate-950 text-slate-400'
+                                    }`}
+                                  >
+                                    {m} Mo
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex gap-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => setEditingOrgSubId(null)}
+                              className="flex-1 py-1.5 border border-slate-800 text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg text-[10px] font-bold transition-all"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              disabled={subscriptionEditLoading}
+                              onClick={async () => {
+                                await handleUpdateOrgSubscription(showViewOrgModal.id, editSubType, editSubMonths);
+                                setEditingOrgSubId(null);
+                              }}
+                              className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-1"
+                            >
+                              {subscriptionEditLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                              Save Plan
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Plan Info Details */
+                        <div className="space-y-2 text-xs">
+                          <div className="grid grid-cols-2 gap-2 text-slate-300">
+                            <div>Plan Type: <strong className="text-white">{subType}</strong></div>
+                            <div>Days Left: <strong className="text-blue-450 font-mono">{remainingStr}</strong></div>
+                            <div>Start Date: <span className="text-slate-400 font-mono">{startDateStr}</span></div>
+                            <div>Expiry Date: <span className="text-slate-400 font-mono">{endDateStr}</span></div>
+                          </div>
+
+                          <div className="pt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingOrgSubId(showViewOrgModal.id);
+                                setEditSubType(subType as any);
+                                setEditSubMonths(1);
+                              }}
+                              className="w-full py-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 hover:text-slate-950 dark:hover:text-white rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1"
+                            >
+                              Change Plan / Extend Subscription
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Instance Toggle Action (Suspend / Reactivate) */}
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (confirm(`Are you sure you want to ${showViewOrgModal.status === 'Active' ? 'SUSPEND' : 'REACTIVATE'} organization '${showViewOrgModal.name}'?`)) {
+                            await handleToggleOrgStatus(showViewOrgModal);
+                            // Refresh the view modal state from DB immediately
+                            const { data: updatedOrg } = await insforge.database
+                              .from('organizations')
+                              .select('*')
+                              .eq('id', showViewOrgModal.id)
+                              .maybeSingle();
+                            if (updatedOrg) {
+                              setShowViewOrgModal(updatedOrg);
+                            }
+                          }
+                        }}
+                        className={`w-full py-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 ${
+                          showViewOrgModal.status === 'Active'
+                            ? 'border-yellow-600/30 hover:bg-yellow-600/10 text-yellow-500'
+                            : 'border-emerald-600/30 hover:bg-emerald-600/10 text-emerald-500'
+                        }`}
+                      >
+                        {showViewOrgModal.status === 'Active' ? 'Suspend Organization Tenant' : 'Reactivate Organization Tenant'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ─── SUBSCRIPTION SETUP MODAL ────────────────────────────────────── */}
+      {showSubscriptionModal && subscriptionRequest && (() => {
+        const computeExpiryDate = () => {
+          const d = new Date();
+          if (subType === 'Trial') {
+            d.setDate(d.getDate() + 15);
+            return d.toLocaleDateString();
+          }
+          if (subType === 'Monthly') {
+            d.setMonth(d.getMonth() + subMonths);
+            return d.toLocaleDateString();
+          }
+          return 'No Expiry (Lifetime)';
+        };
+
+        return (
+          <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-fade-in text-slate-300">
+            <div className="w-full max-w-md border border-slate-800 bg-slate-950 p-6 rounded-2xl relative animate-scale-in shadow-2xl space-y-5">
+              <button
+                onClick={() => {
+                  setShowSubscriptionModal(false);
+                  setSubscriptionRequest(null);
+                }}
+                className="absolute top-4 right-4 p-1.5 text-slate-500 hover:text-white rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-emerald-500" />
+                <h3 className="text-sm font-bold text-white font-heading">Activate Organization Subscription</h3>
+              </div>
+
+              {/* Organization Info (Read Only) */}
+              <div className="p-3.5 bg-slate-900/40 border border-slate-900 rounded-xl space-y-1.5 text-xs">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Organization Summary</span>
+                <div className="grid grid-cols-2 gap-2 text-slate-300">
+                  <div className="truncate">Name: <strong className="text-white block truncate">{subscriptionRequest.organization_name}</strong></div>
+                  <div>Code: <strong className="text-white font-mono block">{subscriptionRequest.generated_org_code}</strong></div>
+                  <div className="col-span-2 truncate">Admin Email: <span className="text-slate-400 font-mono block truncate">{subscriptionRequest.admin_email}</span></div>
+                </div>
+              </div>
+
+              {/* Plan Selection Cards */}
+              <div className="space-y-2 font-sans">
+                <label className="text-[10px] uppercase font-bold text-slate-450 tracking-wide block">Select Subscription Plan</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { type: 'Trial', label: 'Trial', desc: '15 Days access' },
+                    { type: 'Monthly', label: 'Monthly', desc: 'Recurring terms' },
+                    { type: 'Lifetime', label: 'Lifetime', desc: 'No expiry date' }
+                  ].map((plan) => (
+                    <button
+                      key={plan.type}
+                      type="button"
+                      onClick={() => setSubType(plan.type as any)}
+                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between h-20 ${
+                        subType === plan.type
+                          ? 'border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400 shadow-lg shadow-blue-500/5'
+                          : 'border-slate-800 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span className="text-xs font-black">{plan.label}</span>
+                      <span className={`text-[9px] font-medium leading-tight ${subType === plan.type ? 'text-blue-600/80 dark:text-blue-400/80' : 'text-slate-500'}`}>{plan.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Monthly Duration Selection */}
+              {subType === 'Monthly' && (
+                <div className="space-y-2 animate-fade-in font-sans">
+                  <label className="text-[10px] uppercase font-bold text-slate-450 tracking-wide block">Subscription Duration</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[1, 3, 6, 12].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setSubMonths(m)}
+                        className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all text-center ${
+                          subMonths === m
+                            ? 'border-blue-500 bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                            : 'border-slate-800 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-slate-300'
+                        }`}
+                      >
+                        {m} {m === 1 ? 'Mo' : 'Mos'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Summary Block */}
+              <div className="p-3.5 bg-slate-900/10 border border-slate-900 rounded-xl space-y-2 text-xs font-sans">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Subscription Summary</span>
+                <div className="space-y-1 text-slate-300">
+                  <div className="flex justify-between">
+                    <span>Plan Type:</span>
+                    <strong className="text-white">{subType}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Start Date:</span>
+                    <span className="font-mono">{new Date().toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Expiry Date:</span>
+                    <span className="font-mono text-blue-450 font-bold">{computeExpiryDate()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Auto Suspend on Expiry:</span>
+                    <span>{subType === 'Lifetime' ? 'Disabled' : 'Enabled'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Confirmation Checkbox */}
+              <label className="flex items-start gap-2.5 cursor-pointer p-1 font-sans">
+                <input
+                  type="checkbox"
+                  checked={subConfirmVerified}
+                  onChange={(e) => setSubConfirmVerified(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-800 bg-slate-950 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+                />
+                <span className="text-[10px] text-slate-400 font-medium leading-normal select-none">
+                  I have verified this organization and want to activate this subscription.
+                </span>
+              </label>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2 font-sans">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSubscriptionModal(false);
+                    setSubscriptionRequest(null);
+                  }}
+                  className="flex-1 h-9 border border-slate-800 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-white rounded-xl text-xs font-bold transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!subConfirmVerified || subscriptionActionLoading}
+                  onClick={() => handleApprovePendingRequest(subscriptionRequest, { type: subType, months: subMonths })}
+                  className="flex-1 h-9 bg-emerald-600 hover:bg-emerald-700 text-white disabled:bg-slate-200 dark:disabled:bg-slate-900/50 disabled:text-slate-400 dark:disabled:text-slate-600 disabled:cursor-not-allowed rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                >
+                  {subscriptionActionLoading ? <Loader2 className="w-4.5 h-4.5 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                  Approve & Activate
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ─── ONBOARDING APPROVAL SUCCESS OVERLAY ───────────────────────── */}
+      {showApprovalSuccess && (
+        <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-fade-in text-slate-300">
+          <div className="w-full max-w-sm border border-slate-900 bg-slate-950 p-6 rounded-2xl relative animate-scale-in shadow-2xl text-center space-y-5">
+            <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/5">
+              <CheckCircle className="w-8 h-8 text-emerald-500 animate-bounce" />
+            </div>
+            
+            <div className="space-y-2">
+              <h3 className="text-base font-black text-white font-heading">Onboarding Request Approved!</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                The onboarding request for <strong className="text-white block mt-1">{approvedOrgName}</strong> has been successfully approved and set up.
+              </p>
+              <div className="text-[10px] text-slate-500 font-medium">
+                The organization has been provisioned and its administrator account registered.
+              </div>
+            </div>
+            
             <button
-              onClick={() => setShowViewOrgModal(null)}
-              className="absolute top-4 right-4 p-1.5 text-slate-500 hover:text-white rounded-lg transition-colors"
+              onClick={() => {
+                setShowApprovalSuccess(false);
+                setApprovedOrgName('');
+                setShowSubscriptionModal(false);
+                setSubscriptionRequest(null);
+                setShowRequestDetail(false);
+                setSelectedRequest(null);
+              }}
+              className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-500/10"
             >
-              <X className="w-4 h-4" />
+              Great, close desk
             </button>
-
-            <div className="flex items-center gap-2 mb-4">
-              <Building2 className="w-5 h-5 text-blue-500" />
-              <h3 className="text-sm font-bold text-white font-heading">Organization File Summary</h3>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 p-3.5 bg-slate-900/40 border border-slate-900 rounded-xl">
-                {showViewOrgModal.logo_url ? (
-                  <img src={showViewOrgModal.logo_url} alt="Logo" className="w-12 h-12 rounded-lg object-contain bg-slate-950 border border-slate-800" />
-                ) : (
-                  <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center font-bold text-blue-400 text-base font-heading">
-                    {showViewOrgModal.name[0]}
-                  </div>
-                )}
-                <div>
-                  <h4 className="text-sm font-bold text-white">{showViewOrgModal.name}</h4>
-                  <span className="text-[10px] text-slate-500 block font-mono">Code: {showViewOrgModal.code}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div className="p-3 border border-slate-900 rounded-xl bg-slate-900/10 space-y-1">
-                  <span className="text-[10px] text-slate-500 font-bold block uppercase">Status</span>
-                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                    showViewOrgModal.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-                  }`}>{showViewOrgModal.status}</span>
-                </div>
-
-                <div className="p-3 border border-slate-900 rounded-xl bg-slate-900/10 space-y-1">
-                  <span className="text-[10px] text-slate-500 font-bold block uppercase">Enrolled Students</span>
-                  <span className="text-white font-bold">{students.filter(s => s.organization_id === showViewOrgModal.id).length}</span>
-                </div>
-
-                <div className="p-3 border border-slate-900 rounded-xl bg-slate-900/10 space-y-1">
-                  <span className="text-[10px] text-slate-500 font-bold block uppercase">Website</span>
-                  {showViewOrgModal.website ? (
-                    <a href={showViewOrgModal.website} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline truncate block">{showViewOrgModal.website}</a>
-                  ) : (
-                    <span className="text-slate-500">N/A</span>
-                  )}
-                </div>
-
-                <div className="p-3 border border-slate-900 rounded-xl bg-slate-900/10 space-y-1">
-                  <span className="text-[10px] text-slate-500 font-bold block uppercase">Address</span>
-                  <span className="text-slate-300 truncate block">{showViewOrgModal.address || 'N/A'}</span>
-                </div>
-              </div>
-
-              <div className="p-4 border border-slate-900 rounded-xl bg-slate-900/20 space-y-2">
-                <span className="text-[10px] text-slate-500 font-bold block uppercase">Primary Admin Account</span>
-                {admins.find(a => a.organization_id === showViewOrgModal.id) ? (
-                  <div className="space-y-1 text-xs">
-                    <div>Name: <span className="text-slate-200 font-medium">{admins.find(a => a.organization_id === showViewOrgModal.id).name}</span></div>
-                    <div>Email: <span className="text-slate-200 font-mono">{admins.find(a => a.organization_id === showViewOrgModal.id).email}</span></div>
-                  </div>
-                ) : (
-                  <span className="text-xs text-slate-500">No primary administrator linked to this tenant organization.</span>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -2670,6 +4371,285 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ─── USER MANAGEMENT DETAIL / CREDENTIALS MODAL ────────────────── */}
+      {selectedUmUser && (() => {
+        const orgName = organizations.find((o: any) => o.id === selectedUmUser.organization_id)?.name || 'Platform';
+        const tc = {
+          admin:     { label: 'Org Admin',  color: 'text-amber-400',   bg: 'bg-amber-500/10',   border: 'border-amber-500/25' },
+          subadmin:  { label: 'Sub Admin',  color: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/25' },
+          student:   { label: 'Student',    color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/25' },
+          recruiter: { label: 'Recruiter',  color: 'text-violet-400',  bg: 'bg-violet-500/10',  border: 'border-violet-500/25' }
+        }[selectedUmUser._type as 'admin'|'subadmin'|'student'|'recruiter'] || { label: 'User', color: 'text-slate-400', bg: 'bg-slate-800', border: 'border-slate-700' };
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-fade-in text-slate-300">
+            <div className="w-full max-w-lg border border-slate-800 bg-slate-950 rounded-2xl relative animate-scale-in shadow-2xl overflow-hidden">
+              {/* Header */}
+              <div className="flex items-start justify-between p-6 pb-4 border-b border-slate-900">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-extrabold ${tc.bg} ${tc.color}`}>
+                    {(selectedUmUser.name || selectedUmUser.email || '?').charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white font-heading leading-tight">{selectedUmUser.name || '—'}</h3>
+                    <p className="text-[11px] font-mono text-slate-500 mt-0.5">{selectedUmUser.email}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${tc.bg} ${tc.color} border-slate-800`}>
+                    {tc.label}
+                  </span>
+                  <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${(selectedUmUser._status || 'Active') === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                    {selectedUmUser._status || 'Active'}
+                  </span>
+                  <button onClick={() => { setSelectedUmUser(null); setUmCredsSuccess(null); setUmCredsError(''); setUmNewPassword(''); }} className="p-1.5 text-slate-500 hover:text-white rounded-lg transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Info Strip */}
+              <div className="grid grid-cols-3 gap-0 border-b border-slate-900 text-center">
+                {selectedUmUser._type === 'student' && (<>
+                  <div className="py-3 px-2 border-r border-slate-900">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Branch</p>
+                    <p className="text-xs font-bold text-slate-200 mt-0.5">{selectedUmUser.branch || 'N/A'}</p>
+                  </div>
+                  <div className="py-3 px-2 border-r border-slate-900">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Grad Year</p>
+                    <p className="text-xs font-bold text-slate-200 mt-0.5">{selectedUmUser.graduation_year || 'N/A'}</p>
+                  </div>
+                  <div className="py-3 px-2">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">CGPA</p>
+                    <p className="text-xs font-bold text-emerald-400 mt-0.5">{selectedUmUser.cgpa || '0.0'}</p>
+                  </div>
+                </>)}
+                {selectedUmUser._type === 'subadmin' && (<>
+                  <div className="py-3 px-2 border-r border-slate-900">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Designation</p>
+                    <p className="text-xs font-bold text-slate-200 mt-0.5">{selectedUmUser.designation || 'N/A'}</p>
+                  </div>
+                  <div className="py-3 px-2 border-r border-slate-900">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Department</p>
+                    <p className="text-xs font-bold text-slate-200 mt-0.5">{selectedUmUser.department || 'N/A'}</p>
+                  </div>
+                  <div className="py-3 px-2 flex items-center justify-center">
+                    <span className={`px-2.5 py-1 rounded text-[9px] font-bold border ${formatRole(selectedUmUser.role).bg} ${formatRole(selectedUmUser.role).color} ${formatRole(selectedUmUser.role).border}`}>{formatRole(selectedUmUser.role).label}</span>
+                  </div>
+                </>)}
+                {selectedUmUser._type === 'recruiter' && (<>
+                  <div className="py-3 px-2 border-r border-slate-900 col-span-2">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Company</p>
+                    <p className="text-xs font-bold text-slate-200 mt-0.5">{getCompanyName(selectedUmUser.company) || 'N/A'}</p>
+                  </div>
+                  <div className="py-3 px-2">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Status</p>
+                    <p className="text-xs font-bold text-indigo-400 mt-0.5">{selectedUmUser.status || 'Active'}</p>
+                  </div>
+                </>)}
+                {selectedUmUser._type === 'admin' && (<>
+                  <div className="py-3 px-2 border-r border-slate-900 col-span-2">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Admin For</p>
+                    <p className="text-xs font-bold text-slate-200 mt-0.5">{orgName}</p>
+                  </div>
+                  <div className="py-3 px-2">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Role</p>
+                    <p className="text-xs font-bold text-amber-400 mt-0.5">Org Admin</p>
+                  </div>
+                </>)}
+              </div>
+
+              <div className="p-6 space-y-5">
+                {/* Credentials Panel */}
+                <div className="border border-slate-800 rounded-xl overflow-hidden">
+                  <div className="flex items-center gap-2 px-4 py-3 bg-purple-500/5 border-b border-slate-800">
+                    <Key className="w-4 h-4 text-purple-400" />
+                    <span className="text-xs font-bold text-white">Reset Password</span>
+                  </div>
+                  <div className="p-4 bg-slate-950">
+                    {umCredsSuccess ? (
+                      <div className="space-y-3 text-center">
+                        <div className="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
+                          <Check className="w-4 h-4" />
+                        </div>
+                        <p className="text-[11px] text-slate-400">Password updated. Copy the credentials below.</p>
+                        <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg space-y-1 text-xs font-mono text-left">
+                          <div>Email: <span className="text-white select-all">{umCredsSuccess.email}</span></div>
+                          <div>Password: <span className="text-white select-all">{umCredsSuccess.pass}</span></div>
+                        </div>
+                        <button onClick={() => setUmCredsSuccess(null)} className="text-[11px] text-purple-400 hover:underline">Reset another</button>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleUmResetPassword} className="space-y-3">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={umNewPassword}
+                            onChange={e => setUmNewPassword(e.target.value)}
+                            placeholder="New password..."
+                            className="flex-1 h-9 px-3 border border-slate-800 bg-slate-900/50 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-purple-500"
+                          />
+                          <button type="button" onClick={() => setUmNewPassword(generateTempPassword())} className="px-3 h-9 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 rounded-lg text-purple-400 transition-colors whitespace-nowrap">
+                            Generate
+                          </button>
+                        </div>
+                        {umCredsError && <p className="text-[10px] text-red-400">⚠️ {umCredsError}</p>}
+                        <button type="submit" disabled={umCredsResetting} className="w-full h-9 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2">
+                          {umCredsResetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Key className="w-3.5 h-3.5" />}
+                          {umCredsResetting ? 'Updating...' : 'Set Password'}
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                </div>
+
+                {/* Account Control Panel */}
+                <div className="border border-slate-800 rounded-xl overflow-hidden">
+                  <div className="flex items-center gap-2 px-4 py-3 bg-slate-900/40 border-b border-slate-800">
+                    <Lock className="w-4 h-4 text-slate-400" />
+                    <span className="text-xs font-bold text-white">Account Control</span>
+                  </div>
+                  <div className="p-4 space-y-2 bg-slate-950">
+                    {selectedUmUser._status === 'Active' ? (
+                      <button
+                        onClick={() => handleUmStatusChange('Suspended')}
+                        disabled={umStatusUpdating}
+                        className="w-full h-9 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2"
+                      >
+                        {umStatusUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                        Suspend Account
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleUmStatusChange('Active')}
+                        disabled={umStatusUpdating}
+                        className="w-full h-9 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2"
+                      >
+                        {umStatusUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                        Activate Account
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleUmStatusChange('__delete__')}
+                      disabled={umStatusUpdating}
+                      className="w-full h-9 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold rounded-lg text-xs transition-colors flex items-center justify-center gap-2"
+                    >
+                      {umStatusUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                      Delete Account Permanently
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ─── COMPANY DETAILS MODAL ────────────────────────────────────── */}
+      {showCompanyModal && (() => {
+        const companyRecs = recruiters.filter((r: any) => getCompanyName(r.company) === showCompanyModal.companyName);
+        const companyJobs = selectedOrgJobs.filter((j: any) => j.company?.trim() === showCompanyModal.companyName);
+
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-fade-in text-slate-300">
+            <div className="w-full max-w-2xl border border-slate-800 bg-slate-950 rounded-2xl relative animate-scale-in shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+              {/* Header */}
+              <div className="flex items-start justify-between p-6 pb-4 border-b border-slate-900 flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
+                    <Building className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white font-heading leading-tight">{showCompanyModal.companyName}</h3>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Enterprise Employer Profile Details</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowCompanyModal(null)}
+                  className="p-1.5 text-slate-500 hover:text-white rounded-lg transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Stats Summary strip */}
+              <div className="grid grid-cols-2 gap-0 border-b border-slate-900 text-center flex-shrink-0">
+                <div className="py-3 px-2 border-r border-slate-900">
+                  <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Recruiters Linked</p>
+                  <p className="text-xs font-bold text-slate-200 mt-0.5">{companyRecs.length} accounts</p>
+                </div>
+                <div className="py-3 px-2">
+                  <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Job Postings</p>
+                  <p className="text-xs font-bold text-blue-400 mt-0.5">{companyJobs.length} postings</p>
+                </div>
+              </div>
+
+              {/* Scrollable Content Body */}
+              <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                {/* Linked Recruiters section */}
+                <div>
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Linked Recruiters</h4>
+                  <div className="border border-slate-900 rounded-xl overflow-hidden bg-slate-900/10 divide-y divide-slate-900/60">
+                    {companyRecs.map((r: any) => (
+                      <div key={r.id} className="p-3 flex items-center justify-between text-xs hover:bg-slate-900/20 transition-colors">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-purple-500/10 text-purple-400 font-bold flex items-center justify-center text-[10px]">
+                            {(r.name || '?').charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="font-semibold text-slate-200">{r.name}</div>
+                            <div className="text-[10px] font-mono text-slate-500">{r.email}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                            (r.status || 'Active') === 'Active' || (r.status || 'Active') === 'Verified' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                          }`}>{r.status || 'Active'}</span>
+                          <button
+                            onClick={() => {
+                              setSelectedUmUser({ ...r, _type: 'recruiter', _status: r.status || 'Active' });
+                              setUmCredsSuccess(null);
+                              setUmCredsError('');
+                              setUmNewPassword('');
+                              setShowCompanyModal(null);
+                            }}
+                            className="h-7 px-2.5 bg-purple-600/10 hover:bg-purple-600/20 border border-purple-500/20 text-purple-400 font-bold rounded-lg text-[10px] transition-colors"
+                          >
+                            Manage Credentials
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {companyRecs.length === 0 && (
+                      <p className="p-4 text-center text-xs text-slate-500">No recruiters currently associated with this company name.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Job Postings section */}
+                <div>
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Active Job Postings</h4>
+                  <div className="border border-slate-900 rounded-xl overflow-hidden bg-slate-900/10 divide-y divide-slate-900/60">
+                    {companyJobs.map((j: any) => (
+                      <div key={j.id} className="p-3 flex items-center justify-between text-xs">
+                        <div>
+                          <div className="font-semibold text-slate-200">{j.title || 'Untitled Role'}</div>
+                          <div className="text-[10px] text-slate-500 font-mono mt-0.5">ID: {j.id}</div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/10">Active</span>
+                      </div>
+                    ))}
+                    {companyJobs.length === 0 && (
+                      <p className="p-4 text-center text-xs text-slate-500">No active job listings under this company in the current tenant.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

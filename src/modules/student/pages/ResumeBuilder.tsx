@@ -1507,10 +1507,10 @@ export default function ResumeBuilder() {
                                             <div className="mt-1">
                                                 <Badge
                                                     className={`font-semibold px-2.5 py-0.5 border ${atsScore >= 90 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' :
-                                                            atsScore >= 80 ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20' :
-                                                                atsScore >= 70 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :
-                                                                    atsScore >= 60 ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20' :
-                                                                        'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                                                        atsScore >= 80 ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20' :
+                                                            atsScore >= 70 ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :
+                                                                atsScore >= 60 ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20' :
+                                                                    'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
                                                         }`}
                                                 >
                                                     {atsScore >= 95 ? 'Excellent' :
@@ -1735,7 +1735,7 @@ export default function ResumeBuilder() {
                                     <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
                                         <div
                                             className={`h-full bg-primary transition-all duration-500 ${conversionStatus === 'uploading' ? 'w-1/3' :
-                                                    conversionStatus === 'converting' ? 'w-2/3' : 'w-[90%]'
+                                                conversionStatus === 'converting' ? 'w-2/3' : 'w-[90%]'
                                                 }`}
                                         />
                                     </div>
@@ -2108,10 +2108,10 @@ ${auditError || "None"}
                     <div
                         key={t.id}
                         className={`pointer-events-auto p-4 rounded-lg shadow-xl border flex items-center gap-3 transition-all duration-300 ${t.type === 'success'
-                                ? 'bg-emerald-50 dark:bg-emerald-950/95 border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-200'
-                                : t.type === 'error'
-                                    ? 'bg-rose-50 dark:bg-rose-950/95 border-rose-200 dark:border-rose-500/30 text-rose-800 dark:text-rose-200'
-                                    : 'bg-slate-50 dark:bg-slate-900/95 border-slate-200 dark:border-slate-700/30 text-slate-800 dark:text-slate-200'
+                            ? 'bg-emerald-50 dark:bg-emerald-950/95 border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-200'
+                            : t.type === 'error'
+                                ? 'bg-rose-50 dark:bg-rose-950/95 border-rose-200 dark:border-rose-500/30 text-rose-800 dark:text-rose-200'
+                                : 'bg-slate-50 dark:bg-slate-900/95 border-slate-200 dark:border-slate-700/30 text-slate-800 dark:text-slate-200'
                             }`}
                     >
                         {t.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />}

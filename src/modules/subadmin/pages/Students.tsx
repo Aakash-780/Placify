@@ -403,52 +403,73 @@ export default function Students() {
                                                             <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[10px] font-bold">
                                                                 Pending Verification
                                                             </Badge>
-                                                            <Badge variant="secondary">
-                                                                {u.branch || 'Branch N/A'}
-                                                            </Badge>
+                                                            {u.branch && u.branch !== 'N/A' && (
+                                                                <Badge variant="secondary">
+                                                                    {u.branch}
+                                                                </Badge>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
 
                                                 {/* Verification Info Grid */}
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div className={cn(
+                                                    "grid grid-cols-1 gap-6",
+                                                    ((personalEmail && personalEmail !== 'N/A') || (u.phone && u.phone !== 'N/A')) ? "md:grid-cols-2" : "md:grid-cols-1"
+                                                )}>
                                                     {/* Personal Details */}
-                                                    <div className="space-y-3">
-                                                        <h4 className="font-semibold text-sm text-primary uppercase tracking-wider">Personal Info</h4>
-                                                        <div className="space-y-2 text-sm bg-muted/10 p-4 rounded-xl border border-border/40">
-                                                            <div>
-                                                                <span className="text-xs text-muted-foreground block">Personal Email</span>
-                                                                <span className="font-medium">{personalEmail}</span>
-                                                            </div>
-                                                            <div>
-                                                                <span className="text-xs text-muted-foreground block">Phone Number</span>
-                                                                <span className="font-medium">{u.phone || 'N/A'}</span>
+                                                    {((personalEmail && personalEmail !== 'N/A') || (u.phone && u.phone !== 'N/A')) && (
+                                                        <div className="space-y-3">
+                                                            <h4 className="font-semibold text-sm text-primary uppercase tracking-wider">Personal Info</h4>
+                                                            <div className="space-y-2 text-sm bg-muted/10 p-4 rounded-xl border border-border/40">
+                                                                {personalEmail && personalEmail !== 'N/A' && (
+                                                                    <div>
+                                                                        <span className="text-xs text-muted-foreground block">Personal Email</span>
+                                                                        <span className="font-medium">{personalEmail}</span>
+                                                                    </div>
+                                                                )}
+                                                                {u.phone && u.phone !== 'N/A' && (
+                                                                    <div>
+                                                                        <span className="text-xs text-muted-foreground block">Phone Number</span>
+                                                                        <span className="font-medium">{u.phone}</span>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
-                                                    </div>
+                                                    )}
 
                                                     {/* Academic Details */}
                                                     <div className="space-y-3">
                                                         <h4 className="font-semibold text-sm text-primary uppercase tracking-wider">Academic Info</h4>
                                                         <div className="space-y-2 text-sm bg-muted/10 p-4 rounded-xl border border-border/40">
-                                                            <div>
-                                                                <span className="text-xs text-muted-foreground block">Registration / Roll Number</span>
-                                                                <span className="font-medium">{u.college_id || 'N/A'}</span>
-                                                            </div>
-                                                            <div>
-                                                                <span className="text-xs text-muted-foreground block">College Email</span>
-                                                                <span className="font-medium">{collegeEmail}</span>
-                                                            </div>
-                                                            <div className="grid grid-cols-2 gap-2">
+                                                            {u.college_id && u.college_id !== 'N/A' && (
                                                                 <div>
-                                                                    <span className="text-xs text-muted-foreground block">Course</span>
-                                                                    <span className="font-medium">{course}</span>
+                                                                    <span className="text-xs text-muted-foreground block">Registration / Roll Number</span>
+                                                                    <span className="font-medium">{u.college_id}</span>
                                                                 </div>
+                                                            )}
+                                                            {collegeEmail && collegeEmail !== 'N/A' && (
                                                                 <div>
-                                                                    <span className="text-xs text-muted-foreground block">Graduation Year</span>
-                                                                    <span className="font-medium">{u.graduation_year || 'N/A'}</span>
+                                                                    <span className="text-xs text-muted-foreground block">College Email</span>
+                                                                    <span className="font-medium">{collegeEmail}</span>
                                                                 </div>
-                                                            </div>
+                                                            )}
+                                                            {((course && course !== 'N/A') || (u.graduation_year && u.graduation_year !== 'N/A')) && (
+                                                                <div className="grid grid-cols-2 gap-2">
+                                                                    {course && course !== 'N/A' && (
+                                                                        <div>
+                                                                            <span className="text-xs text-muted-foreground block">Course</span>
+                                                                            <span className="font-medium">{course}</span>
+                                                                        </div>
+                                                                    )}
+                                                                    {u.graduation_year && u.graduation_year !== 'N/A' && (
+                                                                        <div>
+                                                                            <span className="text-xs text-muted-foreground block">Graduation Year</span>
+                                                                            <span className="font-medium">{u.graduation_year}</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>

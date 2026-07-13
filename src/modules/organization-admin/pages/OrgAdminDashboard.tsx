@@ -8,7 +8,7 @@ import {
   Award, Clock, Loader2, RefreshCw, Settings as SettingsIcon,
   Globe, MapPin, ExternalLink, Edit2, Star, Activity,
   BarChart3, BookOpen, UserCheck, Target, Shield, ArrowUpRight,
-  CalendarDays
+  CalendarDays, AlertTriangle, AlertCircle
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -282,6 +282,25 @@ export default function OrgAdminDashboard() {
   const city = addressParts[0] || '';
   const state = addressParts[1] || '';
 
+  // Subscription calculation
+  const subscription_type = orgData?.subscription_type || 'Trial';
+  const subscription_status = orgData?.subscription_status || 'Active';
+  const subscription_start_date = orgData?.subscription_start_date;
+  const subscription_end_date = orgData?.subscription_end_date;
+  const daysRemaining = subscription_end_date 
+    ? Math.ceil((new Date(subscription_end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) 
+    : null;
+
+  const startDateStr = subscription_start_date 
+    ? new Date(subscription_start_date).toLocaleDateString() 
+    : 'N/A';
+  const endDateStr = subscription_type === 'Lifetime' 
+    ? 'No Expiry' 
+    : (subscription_end_date ? new Date(subscription_end_date).toLocaleDateString() : 'N/A');
+  const remainingStr = subscription_type === 'Lifetime' 
+    ? 'Unlimited' 
+    : (daysRemaining !== null ? (daysRemaining <= 0 ? '0 Days' : `${daysRemaining} Days`) : 'N/A');
+
   const now = new Date();
   const academicYear = `${now.getFullYear()}-${String(now.getFullYear() + 1).slice(-2)}`;
 
@@ -432,145 +451,215 @@ export default function OrgAdminDashboard() {
           </div>
         </div>
 
-        {/* ── HERO SECTION ── */}
-        <div className="relative overflow-hidden rounded-3xl border border-border" style={{ minHeight: 220 }}>
+        {/* Banners */}
+        {subscription_status === 'Expired' && (
+          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center gap-3 text-red-500 animate-pulse shadow-lg shadow-red-500/5">
+            <AlertTriangle className="w-5 h-5 flex-shrink-0 animate-bounce" />
+            <div className="flex-1">
+              <h4 className="text-xs font-black uppercase tracking-wider">Subscription Expired</h4>
+              <p className="text-[10px] text-red-400 mt-0.5">Your organization's access is restricted. Please contact the platform administrators to renew or reactivate your subscription.</p>
+            </div>
+          </div>
+        )}
 
-          {/* Banner / ambient */}
-          {orgLogo ? (
-            <div
-              className="absolute inset-0"
-              style={{
-                backgroundImage: `url(${orgLogo})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                filter: 'blur(40px) saturate(0.5)',
-                transform: 'scale(1.1)',
-                opacity: 0.15
-              }}
-            />
-          ) : (
-            // Light: subtle blue tint; Dark: deeper blue
-            <div
-              className="absolute inset-0"
-              style={{ background: 'linear-gradient(135deg, hsl(217 91% 60% / 0.08) 0%, transparent 60%)' }}
-            />
-          )}
+        {subscription_status === 'Active' && daysRemaining !== null && daysRemaining > 0 && daysRemaining < 7 && (
+          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center gap-3 text-amber-500 shadow-lg shadow-amber-500/5">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <div className="flex-1">
+              <h4 className="text-xs font-black uppercase tracking-wider">Subscription Expiring Soon</h4>
+              <p className="text-[10px] text-amber-400 mt-0.5">Your {subscription_type} subscription will expire in {daysRemaining} days (on {endDateStr}). Please contact the platform administrators to renew or extend.</p>
+            </div>
+          </div>
+        )}
 
-          {/* Particles */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            {[...Array(6)].map((_, i) => (
+        {/* ── HERO & SUBSCRIPTION GRID ── */}
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+          {/* Hero details */}
+          <div className="relative overflow-hidden rounded-3xl border border-border xl:col-span-3" style={{ minHeight: 220 }}>
+            {/* Banner / ambient */}
+            {orgLogo ? (
               <div
-                key={i}
-                className="absolute w-1 h-1 rounded-full bg-primary/20 animate-float"
+                className="absolute inset-0"
                 style={{
-                  left: `${15 + i * 14}%`,
-                  top: `${20 + (i % 3) * 25}%`,
-                  animationDelay: `${i * 0.8}s`,
-                  animationDuration: `${3 + i * 0.5}s`
+                  backgroundImage: `url(${orgLogo})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  filter: 'blur(40px) saturate(0.5)',
+                  transform: 'scale(1.1)',
+                  opacity: 0.15
                 }}
               />
-            ))}
-          </div>
+            ) : (
+              <div
+                className="absolute inset-0"
+                style={{ background: 'linear-gradient(135deg, hsl(217 91% 60% / 0.08) 0%, transparent 60%)' }}
+              />
+            )}
 
-          {/* Overlay — light: gentle white gradient, dark: deeper overlay */}
-          <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/80 to-background/40" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
+            {/* Particles */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              {[...Array(6)].map((_, i) => (
+                <div
+                  key={i}
+                  className="absolute w-1 h-1 rounded-full bg-primary/20 animate-float"
+                  style={{
+                    left: `${15 + i * 14}%`,
+                    top: `${20 + (i % 3) * 25}%`,
+                    animationDelay: `${i * 0.8}s`,
+                    animationDuration: `${3 + i * 0.5}s`
+                  }}
+                />
+              ))}
+            </div>
 
-          {/* Content */}
-          <div className="relative p-7 lg:p-9">
-            <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+            {/* Overlay */}
+            <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/80 to-background/40" />
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
 
-              {/* Left: Org info */}
-              <div className="flex items-start gap-5">
-                <div className="relative flex-shrink-0">
-                  <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-2xl overflow-hidden border-2 border-border shadow-lg bg-card flex items-center justify-center">
-                    {orgLogo ? (
-                      <img src={orgLogo} alt={orgName} className="w-full h-full object-contain p-1" />
-                    ) : (
-                      <span className="text-2xl lg:text-3xl font-black text-muted-foreground">{orgName[0]}</span>
-                    )}
+            {/* Content */}
+            <div className="relative p-7 lg:p-9">
+              <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+                {/* Left: Org info */}
+                <div className="flex items-start gap-5">
+                  <div className="relative flex-shrink-0">
+                    <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-2xl overflow-hidden border-2 border-border shadow-lg bg-card flex items-center justify-center">
+                      {orgLogo ? (
+                        <img src={orgLogo} alt={orgName} className="w-full h-full object-contain p-1" />
+                      ) : (
+                        <span className="text-2xl lg:text-3xl font-black text-muted-foreground">{orgName[0]}</span>
+                      )}
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-background" />
                   </div>
-                  <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-background" />
+
+                  <div>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span
+                        className="text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider"
+                        style={{
+                          background: orgStatus === 'Active' ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                          color: orgStatus === 'Active' ? '#059669' : '#dc2626',
+                          border: `1px solid ${orgStatus === 'Active' ? 'rgba(16,185,129,0.30)' : 'rgba(239,68,68,0.30)'}`
+                        }}
+                      >
+                        ● {orgStatus} Tenant
+                      </span>
+                      <span className="text-[10px] font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border">
+                        {orgCode}
+                      </span>
+                    </div>
+                    <h2 className="text-xl lg:text-2xl font-black text-foreground tracking-tight leading-tight">{orgName}</h2>
+                    <p className="text-xs text-muted-foreground mt-0.5 italic">Placement &amp; Training Cell</p>
+                    <div className="flex flex-wrap items-center gap-3 mt-2">
+                      {(city || state) && (
+                        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                          <MapPin className="w-3 h-3" /> {[city, state].filter(Boolean).join(', ')}
+                        </span>
+                      )}
+                      {orgWebsite && (
+                        <a
+                          href={orgWebsite}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          <Globe className="w-3 h-3" /> Website
+                        </a>
+                      )}
+                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <Activity className="w-3 h-3" /> Last sync: {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span
-                      className="text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider"
-                      style={{
-                        background: orgStatus === 'Active' ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
-                        color: orgStatus === 'Active' ? '#059669' : '#dc2626',
-                        border: `1px solid ${orgStatus === 'Active' ? 'rgba(16,185,129,0.30)' : 'rgba(239,68,68,0.30)'}`
-                      }}
-                    >
-                      ● {orgStatus} Tenant
-                    </span>
-                    <span className="text-[10px] font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded-full border border-border">
-                      {orgCode}
-                    </span>
-                  </div>
-                  <h2 className="text-xl lg:text-2xl font-black text-foreground tracking-tight leading-tight">{orgName}</h2>
-                  <p className="text-xs text-muted-foreground mt-0.5 italic">Placement &amp; Training Cell</p>
-                  <div className="flex flex-wrap items-center gap-3 mt-2">
-                    {(city || state) && (
-                      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        <MapPin className="w-3 h-3" /> {[city, state].filter(Boolean).join(', ')}
-                      </span>
-                    )}
-                    {orgWebsite && (
-                      <a
-                        href={orgWebsite}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                {/* Divider */}
+                <div className="hidden lg:block w-px h-20 bg-border mx-4 flex-shrink-0" />
+
+                {/* Right: Admin info */}
+                <div className="flex-1">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Portal Administrator</p>
+                      <p className="text-base font-black text-foreground">{adminName}</p>
+                      <p className="text-[11px] text-muted-foreground font-mono">{adminEmail}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">Session: {academicYear}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        to="/organization-admin/settings"
+                        className="flex items-center gap-1.5 h-8 px-3.5 rounded-xl text-[11px] font-bold bg-muted hover:bg-muted/80 border border-border text-foreground transition-all"
                       >
-                        <Globe className="w-3 h-3" /> Website
-                      </a>
-                    )}
-                    <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <Activity className="w-3 h-3" /> Last sync: {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                        <Edit2 className="w-3 h-3" /> Edit Profile
+                      </Link>
+                      <Link
+                        to="/organization-admin/settings"
+                        className="flex items-center gap-1.5 h-8 px-3.5 rounded-xl text-[11px] font-bold text-primary transition-all border border-primary/30 bg-primary/8 hover:bg-primary/15"
+                      >
+                        <Star className="w-3 h-3" /> Branding
+                      </Link>
+                      {orgWebsite && (
+                        <a
+                          href={orgWebsite}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1.5 h-8 px-3.5 rounded-xl text-[11px] font-bold bg-card hover:bg-muted border border-border text-muted-foreground hover:text-foreground transition-all"
+                        >
+                          <ExternalLink className="w-3 h-3" /> Public Profile
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
 
-              {/* Divider */}
-              <div className="hidden lg:block w-px h-20 bg-border mx-4 flex-shrink-0" />
+          {/* Subscription Card */}
+          <div className="border border-border bg-card p-6 rounded-3xl flex flex-col justify-between relative overflow-hidden shadow-lg shadow-blue-500/[0.02] font-sans">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-primary/10 to-transparent pointer-events-none" />
 
-              {/* Right: Admin info */}
-              <div className="flex-1">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">Portal Administrator</p>
-                    <p className="text-base font-black text-foreground">{adminName}</p>
-                    <p className="text-[11px] text-muted-foreground font-mono">{adminEmail}</p>
-                    <p className="text-[10px] text-muted-foreground mt-1">Session: {academicYear}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Link
-                      to="/organization-admin/settings"
-                      className="flex items-center gap-1.5 h-8 px-3.5 rounded-xl text-[11px] font-bold bg-muted hover:bg-muted/80 border border-border text-foreground transition-all"
-                    >
-                      <Edit2 className="w-3 h-3" /> Edit Profile
-                    </Link>
-                    <Link
-                      to="/organization-admin/settings"
-                      className="flex items-center gap-1.5 h-8 px-3.5 rounded-xl text-[11px] font-bold text-primary transition-all border border-primary/30 bg-primary/8 hover:bg-primary/15"
-                    >
-                      <Star className="w-3 h-3" /> Branding
-                    </Link>
-                    {orgWebsite && (
-                      <a
-                        href={orgWebsite}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-1.5 h-8 px-3.5 rounded-xl text-[11px] font-bold bg-card hover:bg-muted border border-border text-muted-foreground hover:text-foreground transition-all"
-                      >
-                        <ExternalLink className="w-3 h-3" /> Public Profile
-                      </a>
-                    )}
-                  </div>
+            <div className="space-y-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-black block">Current Plan</span>
+                  <h3 className="text-lg font-black text-foreground mt-0.5">{subscription_type}</h3>
                 </div>
+                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                  subscription_status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                  subscription_status === 'Expired' ? 'bg-red-500/10 text-red-400 border border-red-500/20 shadow-lg shadow-red-500/5' :
+                  'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                }`}>
+                  {subscription_status}
+                </span>
+              </div>
+
+              <div className="space-y-2 text-[11px] border-t border-border/60 pt-4">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Start Date:</span>
+                  <span className="text-foreground font-semibold font-mono">{startDateStr}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Expiry Date:</span>
+                  <span className="text-foreground font-semibold font-mono">{endDateStr}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Auto Suspend:</span>
+                  <span className="text-foreground font-semibold">{orgData?.auto_suspend ? 'Enabled' : 'Disabled'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-border/60 pt-4 mt-4">
+              <div className="flex items-baseline justify-between">
+                <span className="text-[10px] text-muted-foreground uppercase font-bold">Days Remaining</span>
+                <span className={`text-xl font-black font-mono tracking-tight ${
+                  subscription_status === 'Active' 
+                    ? (daysRemaining !== null && daysRemaining < 7 ? 'text-amber-500 animate-pulse' : 'text-emerald-400')
+                    : 'text-red-500'
+                }`}>
+                  {remainingStr}
+                </span>
               </div>
             </div>
           </div>
