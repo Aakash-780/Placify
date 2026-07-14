@@ -178,7 +178,7 @@ export default function App() {
   // Subscription setup modal states
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [subscriptionRequest, setSubscriptionRequest] = useState<any | null>(null);
-  const [subType, setSubType] = useState<'Trial' | 'Monthly' | 'Lifetime'>('Trial');
+  const [subType, setSubType] = useState<'Trial' | 'Monthly' | 'Lifetime' | 'Testing'>('Trial');
   const [subMonths, setSubMonths] = useState<number>(1);
   const [subConfirmVerified, setSubConfirmVerified] = useState(false);
   const [subscriptionActionLoading, setSubscriptionActionLoading] = useState(false);
@@ -668,7 +668,7 @@ export default function App() {
   }
 
   // Approve Pending Organization Request
-  async function handleApprovePendingRequest(req: any, subDetails: { type: 'Trial' | 'Monthly' | 'Lifetime'; months: number }) {
+  async function handleApprovePendingRequest(req: any, subDetails: { type: 'Trial' | 'Monthly' | 'Lifetime' | 'Testing'; months: number }) {
     setActionLoading(true);
     setSubscriptionActionLoading(true);
     let createdOrgId = '';
@@ -690,6 +690,9 @@ export default function App() {
       } else if (subDetails.type === 'Lifetime') {
         endDate = null;
         autoSuspend = false;
+      } else if (subDetails.type === 'Testing') {
+        endDate = new Date();
+        endDate.setMinutes(endDate.getMinutes() + 5);
       }
 
       // 3. Insert into organizations
@@ -4127,6 +4130,10 @@ export default function App() {
           if (subType === 'Monthly') {
             d.setMonth(d.getMonth() + subMonths);
             return d.toLocaleDateString();
+          }
+          if (subType === 'Testing') {
+            d.setMinutes(d.getMinutes() + 5);
+            return d.toLocaleTimeString() + ' (5 Minutes)';
           }
           return 'No Expiry (Lifetime)';
         };
