@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { insforge } from '@/lib/insforge';
 import { useRole } from '@/context/RoleContext';
+import { getOllamaConfig, checkOllamaStatus } from '@/services/ats-ai/ollama';
+import { runAtsAnalysis } from '@/services/ats-ai/scoring';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -677,6 +679,7 @@ export default function ResumeBuilder() {
 
     // ATS State
     const [resumeText, setResumeText] = useState('');
+    const [jobDescription, setJobDescription] = useState('');
     const [atsPdfPayload, setAtsPdfPayload] = useState<{ base64: string, name: string } | null>(null);
     const [atsScore, setAtsScore] = useState<number | null>(null);
     const [atsFeedback, setAtsFeedback] = useState<string>('');
@@ -1011,6 +1014,77 @@ export default function ResumeBuilder() {
         setAtsBreakdown(null);
         setAtsInsights(null);
 
+        const ollamaConfig = getOllamaConfig();
+
+        if (ollamaConfig.useAiAts) {
+            // First check if Ollama is running
+            const status = await checkOllamaStatus(ollamaConfig);
+            if (!status.running) {
+                setAtsFeedback("Local AI service is unavailable. Please start Ollama.");
+                showToast("Local AI service is unavailable. Please start Ollama.", "error");
+                setChecking(false);
+                return;
+            }
+
+            if (!status.hasModel) {
+                const modelErrorMsg = `Local AI model '${ollamaConfig.modelName}' is not loaded. Please run 'ollama run ${ollamaConfig.modelName}' in your terminal first.`;
+                setAtsFeedback(modelErrorMsg);
+                showToast(`Model ${ollamaConfig.modelName} not found`, "error");
+                setChecking(false);
+                return;
+            }
+
+            setAtsFeedback("Initializing local Llama 3.2 engine...\n");
+
+            try {
+                const analysisResult = await runAtsAnalysis(
+                    resumeText,
+                    jobDescription,
+                    ollamaConfig,
+                    (progressText) => {
+                        setAtsFeedback(progressText);
+                    }
+                );
+
+                setAtsScore(analysisResult.overall_score);
+                setKeywords(analysisResult.missing_keywords);
+                setAtsBreakdown({
+                    keywordMatch: analysisResult.keyword_match,
+                    actionVerbs: analysisResult.action_verbs,
+                    resumeLength: analysisResult.resume_length,
+                    formatting: analysisResult.formatting_score,
+                    projects: analysisResult.projects_score,
+                    experience: analysisResult.experience_score
+                });
+
+                setAtsInsights({
+                    strengths: analysisResult.strengths.slice(0, 3),
+                    weaknesses: analysisResult.weaknesses.slice(0, 3),
+                    recommendations: analysisResult.suggestions.slice(0, 3)
+                });
+
+                setAtsFeedback(analysisResult.summary);
+                showToast("ATS AI analysis completed", "success");
+
+                if (roleData?.id) {
+                    const { error } = await insforge.database.from('ats_scans').insert([{
+                        student_id: roleData.id,
+                        score: analysisResult.overall_score,
+                        feedback: analysisResult.summary,
+                        missing_keywords: analysisResult.missing_keywords
+                    }]);
+                    if (error) console.warn("Failed to save ATS history:", error);
+                }
+                setChecking(false);
+                return;
+            } catch (err: any) {
+                console.error("Local AI ATS failed, falling back to heuristic engine:", err);
+                showToast("AI analysis failed. Using heuristic fallback.", "info");
+                // fall through to heuristic engine below
+            }
+        }
+
+        // ORIGINAL ATS ALGORITHM (HEURISTIC CALCULATION)
         const text = resumeText.toLowerCase();
 
         // 1. HEURISTIC CALCULATION (Score & Keywords)
@@ -1337,6 +1411,7 @@ export default function ResumeBuilder() {
                                                 className="h-8 w-8 text-slate-400 hover:text-destructive dark:text-muted-foreground dark:hover:text-destructive hover:bg-destructive/10"
                                                 onClick={() => {
                                                     setResumeText('');
+                                                    setJobDescription('');
                                                     setAtsFileMetadata(null);
                                                     setAtsPdfPayload(null);
                                                     setAtsScore(null);
@@ -1395,6 +1470,20 @@ export default function ResumeBuilder() {
                                 className="bg-white dark:bg-slate-950/60 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-600 focus-visible:ring-primary shadow-sm"
                             />
 
+                            <div className="space-y-1.5 pt-2">
+                                <Label htmlFor="ats-job-description" className="text-xs font-semibold text-slate-700 dark:text-slate-350">
+                                    Target Job Description (Optional)
+                                </Label>
+                                <Textarea
+                                    id="ats-job-description"
+                                    placeholder="Paste the target job description here to analyze keyword match, skills alignment, and role fit..."
+                                    rows={6}
+                                    value={jobDescription}
+                                    onChange={e => setJobDescription(e.target.value)}
+                                    className="bg-white dark:bg-slate-950/60 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-650 focus-visible:ring-primary shadow-sm text-xs leading-relaxed"
+                                />
+                            </div>
+
                             <Button
                                 onClick={checkATS}
                                 disabled={checking || (!resumeText.trim() && !atsPdfPayload)}
@@ -1435,6 +1524,7 @@ export default function ResumeBuilder() {
                                     className="text-xs h-8 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-700 dark:text-slate-200"
                                     onClick={() => {
                                         setResumeText('');
+                                        setJobDescription('');
                                         setAtsFileMetadata(null);
                                         setAtsPdfPayload(null);
                                         setAtsScore(null);
