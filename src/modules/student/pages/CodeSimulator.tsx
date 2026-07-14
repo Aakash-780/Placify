@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from 'react-resizable-panels';
 import {
     Play, Square, Code2, Terminal as TerminalIcon, RotateCcw,
-    Clock, ChevronRight, CheckCircle, Sparkles, Brain, Wand2, Info, AlertTriangle,
+    Clock, ChevronRight, CheckCircle, Brain, Info, AlertTriangle,
     CheckCircle2, AlertCircle, X, Copy, Maximize2, Minimize2, Check, RefreshCw,
     Trophy, Flame, ArrowRight
 } from 'lucide-react';
@@ -197,25 +197,6 @@ const checkHasNotes = (notesStr: string | null) => {
     return true;
 };
 
-// --- Code Executable Validation Helper ---
-const isCodeExecutable = (code: string, lang: string): boolean => {
-    if (!code) return true;
-    const trimmed = code.trim();
-    if (!trimmed) return true;
-    if (lang === 'cpp') {
-        return code.includes('int main(') || /int\s+main\s*\(/.test(code);
-    }
-    if (lang === 'java') {
-        return code.includes('public static void main') || /public\s+static\s+void\s+main/.test(code);
-    }
-    if (lang === 'javascript') {
-        return code.includes('console.log(') || /console\s*\.\s*log\s*\(/.test(code);
-    }
-    if (lang === 'python') {
-        return code.includes('print(') || /print\s*\(/.test(code) || code.includes('__name__ ==') || code.includes('__name__==');
-    }
-    return true;
-};
 
 // --- Output Normalization Helper ---
 const normalizeOutput = (val: string): string => {
@@ -581,41 +562,7 @@ const generateRunnerWrapper = (code: string, language: string, problem: any): st
     return code;
 };
 
-// --- AI Response String Parser ---
-const parseAiResponse = (text: string) => {
-    let mistakesText = '';
-    let fixText = '';
-    let codeText = '';
-
-    const mistakesHeaderMatch = text.match(/##\s*(Mistakes|Why Wrong|Error)[\s\S]*?(?=##\s*Fix)/i);
-    const fixHeaderMatch = text.match(/##\s*Fix[\s\S]*?(?=##\s*Correct Code)/i);
-    const codeHeaderMatch = text.match(/##\s*Correct Code([\s\S]*)/i);
-
-    if (mistakesHeaderMatch) {
-        mistakesText = mistakesHeaderMatch[0].replace(/##\s*(Mistakes|Why Wrong|Error)/i, '').trim();
-    }
-    if (fixHeaderMatch) {
-        fixText = fixHeaderMatch[0].replace(/##\s*Fix/i, '').trim();
-    }
-    if (codeHeaderMatch) {
-        codeText = codeHeaderMatch[1].trim();
-        codeText = codeText.replace(/^```[a-zA-Z0-9_]*\n/i, '').replace(/\n```$/g, '').trim();
-    }
-
-    if (!mistakesHeaderMatch && !fixHeaderMatch && !codeHeaderMatch) {
-        return null;
-    }
-
-    return {
-        mistakesHeader: mistakesHeaderMatch ? mistakesHeaderMatch[1] : 'Mistakes',
-        mistakesText,
-        fixText,
-        codeText
-    };
-};
-
 export default function CodeSimulator() {
-    const ENABLE_AI_ASSISTANT = false;
     const { roleData } = useRole();
     const { resolvedTheme } = useTheme();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -684,95 +631,6 @@ export default function CodeSimulator() {
         return null;
     };
 
-    const renderAiResponse = (text: string) => {
-        if (!text) return null;
-        
-        // Skip structured parsing for general conversational/info modes
-        const skipParsing = ['hint', 'approach', 'optimize', 'review', 'chat'].includes(aiMode);
-        const parsed = skipParsing ? null : parseAiResponse(text);
-
-        if (!parsed) {
-            return (
-                <div className="text-sm whitespace-pre-wrap leading-relaxed font-sans prose dark:prose-invert max-w-none space-y-2">
-                    {text}
-                </div>
-            );
-        }
-
-        const { mistakesHeader, mistakesText, fixText, codeText } = parsed;
-        const codeIsExecutable = isCodeExecutable(codeText, language);
-
-        return (
-            <div className="space-y-4 font-sans text-sm">
-                {mistakesText && (
-                    <div className="border border-red-200 dark:border-red-900/30 bg-red-50/50 dark:bg-red-950/20 rounded-lg p-4">
-                        <h4 className="text-red-700 dark:text-red-400 font-semibold mb-2 flex items-center gap-1.5">
-                            <AlertCircle className="w-4 h-4 shrink-0" />
-                            {mistakesHeader}
-                        </h4>
-                        <ul className="pl-5 text-red-800 dark:text-red-300 space-y-1 list-disc">
-                            {mistakesText.split('\n').map((line, idx) => {
-                                const cleaned = line.replace(/^\s*[*+-]\s*/, '').trim();
-                                if (!cleaned) return null;
-                                return <li key={idx}>{cleaned}</li>;
-                            })}
-                        </ul>
-                    </div>
-                )}
-
-                {fixText && (
-                    <div className="border border-amber-200 dark:border-amber-900/30 bg-amber-50/50 dark:bg-amber-950/20 rounded-lg p-4">
-                        <h4 className="text-amber-700 dark:text-amber-400 font-semibold mb-2 flex items-center gap-1.5">
-                            <Info className="w-4 h-4 shrink-0" />
-                            Fix
-                        </h4>
-                        <ul className="pl-5 text-amber-800 dark:text-amber-300 space-y-1 list-disc">
-                            {fixText.split('\n').map((line, idx) => {
-                                const cleaned = line.replace(/^\s*[*+-]\s*/, '').trim();
-                                if (!cleaned) return null;
-                                return <li key={idx}>{cleaned}</li>;
-                            })}
-                        </ul>
-                    </div>
-                )}
-
-                {codeText && (
-                    <div className="space-y-2">
-                        {!codeIsExecutable && (
-                            <div className="border border-amber-200 dark:border-amber-900/30 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 rounded-lg p-3 flex items-start gap-2.5">
-                                <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
-                                <div>
-                                    <p className="font-semibold text-amber-800 dark:text-amber-200">⚠ AI generated non-executable code.</p>
-                                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">This appears to be a LeetCode-style solution and may not run directly in the simulator.</p>
-                                </div>
-                            </div>
-                        )}
-                        <div className="border border-border rounded-lg overflow-hidden bg-slate-900 text-slate-100">
-                            <div className="flex items-center justify-between px-4 py-2 bg-slate-800 border-b border-slate-700 text-xs">
-                                <span className="font-mono text-slate-400 font-semibold uppercase">{language}</span>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 text-xs text-slate-300 hover:text-white hover:bg-slate-700 px-2 flex items-center gap-1"
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(codeText);
-                                        showToast("Code copied to clipboard!", "success");
-                                    }}
-                                >
-                                    <Copy className="w-3.5 h-3.5" />
-                                    Copy Code
-                                </Button>
-                            </div>
-                            <pre className="p-4 overflow-auto max-h-[350px] text-xs font-mono whitespace-pre leading-relaxed scrollbar-thin">
-                                <code>{codeText}</code>
-                            </pre>
-                        </div>
-                    </div>
-                )}
-            </div>
-        );
-    };
-
     // =====================================================
     // FEATURE: STATE & HOOKS
     // =====================================================
@@ -782,14 +640,8 @@ export default function CodeSimulator() {
     const [progressList, setProgressList] = useState<any[]>([]);
     const [notes, setNotes] = useState('');
     const [isSolved, setIsSolved] = useState(false);
-    const [aiResponse, setAiResponse] = useState('');
-    const [aiLoading, setAiLoading] = useState(false);
-    const [showAiDialog, setShowAiDialog] = useState(false);
     const [isWrongAnswer, setIsWrongAnswer] = useState(false);
-    const [aiMode, setAiMode] = useState<'hint' | 'approach' | 'optimize' | 'solution' | 'error' | 'wrong_answer' | 'review' | 'chat'>('hint');
     const [lastExecutionData, setLastExecutionData] = useState<any>(null);
-    const [chatInput, setChatInput] = useState('');
-    const [chatHistory, setChatHistory] = useState<{ sender: 'user' | 'ai'; text: string }[]>([]);
 
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [leftTab, setLeftTab] = useState('description');
@@ -807,13 +659,6 @@ export default function CodeSimulator() {
         setCurrentPage(1);
     }, [problems]);
 
-    // Reset AI states when selectedProblem changes
-    useEffect(() => {
-        setAiResponse('');
-        setChatHistory([]);
-        setChatInput('');
-        setAiMode('hint');
-    }, [selectedProblem]);
 
     // Handlers and effects for the Accepted Celebration Modal
     useEffect(() => {
@@ -1225,278 +1070,6 @@ export default function CodeSimulator() {
         await saveProgress({ status: newStatus });
     };
 
-    // =====================================================
-    // FEATURE: AI ASSISTANT API INTEGRATION
-    // =====================================================
-    const askGemini = async (
-        mode: 'hint' | 'approach' | 'optimize' | 'solution' | 'error' | 'wrong_answer' | 'review' | 'chat',
-        customMessage?: string
-    ) => {
-        setAiMode(mode);
-
-        const key = import.meta.env.VITE_GEMINI_API_KEY;
-        console.log(`[AI Assistant] Gemini API Key status check:`, {
-            exists: !!key,
-            length: key ? key.length : 0,
-            prefix: key ? key.substring(0, 7) : 'none',
-            isPlaceholder: key === 'your_gemini_api_key_here'
-        });
-
-        if (!key || key === 'your_gemini_api_key_here') {
-            const errorMsg = "⚠️ VITE_GEMINI_API_KEY is not configured in your environment variables.";
-            console.error(`[AI Assistant] Key Configuration Error: ${errorMsg}`);
-            if (mode === 'chat') {
-                setChatHistory(prev => [...prev, { sender: 'ai', text: errorMsg }]);
-            } else {
-                setAiResponse(errorMsg);
-            }
-            return;
-        }
-
-        if (mode === 'chat') {
-            if (!customMessage?.trim()) return;
-            const newUserMessage = { sender: 'user' as const, text: customMessage.trim() };
-            setChatHistory(prev => [...prev, newUserMessage]);
-        }
-
-        setAiLoading(true);
-        if (mode !== 'chat') {
-            setAiResponse("Thinking...");
-        }
-
-        try {
-            let modeInstructions = "";
-            switch (mode) {
-                case 'hint':
-                    modeInstructions = `You must provide a subtle, conceptual hint to help the student progress.
-Do NOT write or reveal the correct code solution.
-Focus on:
-- Clues about the algorithm or pattern.
-- Edge cases they might have missed.
-- No direct code snippets. Only conceptual guidance.`;
-                    break;
-                case 'approach':
-                    modeInstructions = `You must explain the optimal algorithmic approach in detail.
-Focus on:
-- Explaining the time and space complexity.
-- Describing the steps of the algorithm clearly.
-- Showing pseudocode or high-level structure, but do NOT write the full concrete code yet.`;
-                    break;
-                case 'optimize':
-                    modeInstructions = `You must suggest performance, memory, or readability optimizations for the student's current code.
-Focus on:
-- Analyzing time/space complexity of the current code.
-- Outlining more efficient alternatives.
-- Showing optimized snippets where relevant.`;
-                    break;
-                case 'solution':
-                    modeInstructions = `You must reveal the complete, optimal, and correct code solution.
-Follow this Markdown format:
-## Correct Code
-\`\`\`${language}
-<full corrected code>
-\`\`\`
-## Explanation
-- <Brief explanation of why this solution is optimal>
-
-Do NOT return LeetCode-only Solution classes unless necessary. The code must run in Judge0.`;
-                    break;
-                case 'review':
-                    modeInstructions = `You must perform a detailed Code Review of the student's current code.
-Check for:
-- Code cleanliness and formatting.
-- Potential edge cases (e.g. empty inputs, null pointers, overflow).
-- Performance bottleneck issues.
-Structure your response with bullet points under "## Strengths", "## Areas for Improvement", and "## Edge Cases to Test".`;
-                    break;
-                case 'chat':
-                    modeInstructions = `You are a coding mentor. Answer the student's specific question: "${customMessage}"
-Provide direct, clean explanations. If they ask for code, show snippets but keep it educational.`;
-                    break;
-                case 'error':
-                case 'wrong_answer':
-                default:
-                    modeInstructions = `Analyze the student's mistakes and explain how to fix them.
-You must structure your response exactly in this Markdown format:
-## Mistakes
-- <Brief bullet list of what is wrong or compiler/runtime errors>
-
-## Fix
-- <Brief explanation of how to fix it>
-
-## Correct Code
-\`\`\`${language}
-<full corrected code>
-\`\`\`
-`;
-                    break;
-            }
-
-            // Compile chat history if chat mode is active
-            let historyContext = "";
-            if (mode === 'chat' && chatHistory.length > 0) {
-                historyContext = `CONVERSATION HISTORY:\n` + 
-                    chatHistory.slice(-4).map(msg => `${msg.sender.toUpperCase()}: ${msg.text}`).join('\n') + `\n`;
-            }
-
-            const prompt = `You are generating code for a Judge0-based Code Simulator.
-
-RULES:
-1. Return COMPLETE executable code.
-2. Include main() when required.
-3. Follow the exact sample input format.
-4. Follow the exact sample output format.
-5. Do not return LeetCode-only Solution classes unless explicitly requested.
-6. Code must compile and run directly in Judge0.
-7. Preserve the user's approach whenever possible.
-8. Fix only the mistakes.
-9. Return corrected code first.
-10. Keep explanations short. No essays. No theory. No long explanations.
-
-PROBLEM DETAILS:
-- Title: ${selectedProblem?.title || 'Free Coding'}
-- Description: ${selectedProblem?.description || 'N/A'}
-- Constraints: ${selectedProblem?.constraints || 'N/A'}
-
-STUDENT CONTEXT:
-- Programming Language: ${language}
-- Student's Current Code:
-\`\`\`${language}
-${code}
-\`\`\`
-
-EXECUTION RESULTS:
-- Current Terminal Output: ${output || 'No output recorded yet'}
-${lastExecutionData?.compile_output ? `- Compiler Error Output: ${lastExecutionData.compile_output}` : ''}
-${lastExecutionData?.stderr ? `- Runtime Error Output: ${lastExecutionData.stderr}` : ''}
-${mode === 'wrong_answer' ? `- Expected Output: ${selectedProblem?.sample_output || 'N/A'}` : ''}
-
-STRICT FORMAT RULES:
-- Maximum 5 bullet points total across the entire response.
-- No introduction (do not write "Here is the analysis...", "Sure...", "Based on your code...", etc.).
-- No conclusion or motivational text (do not write "Keep coding!", "Good luck!", "Hope this helps", etc.).
-- No theory paragraphs or general explanations of syntax.
-- Always provide the full corrected code inside a Markdown code block under the "## Correct Code" header.
-- Focus strictly on the student's mistakes/errors and direct fixes.
-
-${historyContext}
-${modeInstructions}`;
-
-            console.log(`[AI Assistant] Prompt Generated for mode "${mode}":\n`, prompt);
-
-            const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 3, initialDelay = 1000): Promise<Response> => {
-                let delay = initialDelay;
-                for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
-                    try {
-                        console.log(`[AI Assistant] Request Payload (Attempt ${attempt}/${maxRetries + 1}):\n`, options.body);
-                        const res = await fetch(url, options);
-
-                        if (res.ok) {
-                            console.log(`[AI Assistant] API Response Status: ${res.status} OK`);
-                            return res;
-                        }
-
-                        console.error(`[AI Assistant] Error Response Received (Attempt ${attempt}): Status ${res.status}`);
-
-                        if (res.status === 429) {
-                            const rateLimitMsg = "AI service rate limit reached. Please try again later.";
-                            console.warn(`[AI Assistant] 429 Too Many Requests. Aborting retries.`);
-                            throw new Error(`API_429: ${rateLimitMsg}`);
-                        }
-
-                        if (res.status === 503) {
-                            if (attempt <= maxRetries) {
-                                const retryMsg = "AI service temporarily unavailable. Retrying...";
-                                console.warn(`[AI Assistant] 503 Service Unavailable. Retrying in ${delay}ms... (Attempt ${attempt}/${maxRetries})`);
-                                if (mode !== 'chat') {
-                                    setAiResponse(retryMsg);
-                                }
-                                await new Promise(resolve => setTimeout(resolve, delay));
-                                delay *= 2; // Exponential backoff
-                                continue;
-                            } else {
-                                throw new Error("API_503: AI service temporarily unavailable after multiple retries.");
-                            }
-                        }
-
-                        let errorDetail = "";
-                        try {
-                            errorDetail = await res.text();
-                        } catch {}
-                        console.error(`[AI Assistant] API Error Detail (Attempt ${attempt}):`, errorDetail);
-                        throw new Error(`Gemini API error ${res.status}: ${errorDetail || 'Unknown error'}`);
-                    } catch (err: any) {
-                        if (err.message.startsWith('API_429') || err.message.startsWith('API_503')) {
-                            throw err;
-                        }
-
-                        if (attempt <= maxRetries) {
-                            console.warn(`[AI Assistant] Network error or exception (Attempt ${attempt}/${maxRetries}):`, err, `Retrying in ${delay}ms...`);
-                            if (mode !== 'chat') {
-                                setAiResponse("AI service temporarily unavailable. Retrying...");
-                            }
-                            await new Promise(resolve => setTimeout(resolve, delay));
-                            delay *= 2;
-                        } else {
-                            throw err;
-                        }
-                    }
-                }
-                throw new Error("Maximum retry attempts reached without response.");
-            };
-
-            const res = await fetchWithRetry(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
-                {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: { temperature: 0.2 },
-                    }),
-                }
-            );
-
-            const data = await res.json();
-            console.log(`[AI Assistant] Response JSON Payload:`, data);
-
-            const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated.';
-            console.log("=== AI RESPONSE RECEIVED ===\n", responseText);
-
-            if (mode === 'chat') {
-                setChatHistory(prev => [...prev, { sender: 'ai', text: responseText }]);
-            } else {
-                setAiResponse(responseText);
-            }
-        } catch (err: any) {
-            console.error('Gemini error final catch:', err);
-
-            if (err.message.includes('API_429') || err.message.includes('rate limit reached')) {
-                const msg = "AI service rate limit reached. Please try again later.";
-                if (mode === 'chat') {
-                    setChatHistory(prev => [...prev, { sender: 'ai', text: msg }]);
-                } else {
-                    setAiResponse(msg);
-                }
-            } else if (err.message.includes('API_503') || err.message.includes('temporarily unavailable')) {
-                const msg = "AI service temporarily unavailable. Please try again later.";
-                if (mode === 'chat') {
-                    setChatHistory(prev => [...prev, { sender: 'ai', text: msg }]);
-                } else {
-                    setAiResponse(msg);
-                }
-            } else {
-                const msg = `⚠️ Failed to connect to Gemini: ${err.message || 'Unknown error'}`;
-                if (mode === 'chat') {
-                    setChatHistory(prev => [...prev, { sender: 'ai', text: msg }]);
-                } else {
-                    setAiResponse(msg);
-                }
-            }
-        } finally {
-            setAiLoading(false);
-        }
-    };
 
     // When language changes, reset code to starter template
     const handleLanguageChange = useCallback((lang: string) => {
@@ -1763,12 +1336,6 @@ ${modeInstructions}`;
         setShowCelebrationModal(false);
     };
 
-    const handleViewSolutionAnalysis = () => {
-        setShowCelebrationModal(false);
-        setBottomTab('ai');
-        setAiMode('review');
-        askGemini('review');
-    };
 
     // Keyboard Shortcuts Listener
     useEffect(() => {
@@ -2161,16 +1728,7 @@ ${modeInstructions}`;
                                         <TabsTrigger value="notes" className="px-3 h-8 text-xs font-semibold data-[state=active]:bg-background">
                                             📝 Notes
                                         </TabsTrigger>
-                                        {ENABLE_AI_ASSISTANT && (
-                                            <>
-                                                <TabsTrigger value="hints" className="px-3 h-8 text-xs font-semibold data-[state=active]:bg-background">
-                                                    💡 Hints
-                                                </TabsTrigger>
-                                                <TabsTrigger value="editorial" className="px-3 h-8 text-xs font-semibold data-[state=active]:bg-background">
-                                                    🧠 Editorial
-                                                </TabsTrigger>
-                                            </>
-                                        )}
+
                                     </TabsList>
                                     
                                     <div className="flex-1 overflow-y-auto p-4 scrollbar-thin space-y-4">
@@ -2249,69 +1807,7 @@ ${modeInstructions}`;
                                             </div>
                                         </TabsContent>
                                         
-                                        {ENABLE_AI_ASSISTANT && (
-                                            <>
-                                                <TabsContent value="hints" className="m-0 space-y-4">
-                                                    <div className="flex items-center justify-between border-b pb-2">
-                                                        <h3 className="font-heading font-bold text-sm">Problem Hints</h3>
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="h-7 text-xs"
-                                                            onClick={() => askGemini('hint')}
-                                                            disabled={aiLoading}
-                                                        >
-                                                            🤖 Generate AI Hint
-                                                        </Button>
-                                                    </div>
 
-                                                    <div className="space-y-3 pt-2">
-                                                        {aiLoading && aiMode === 'hint' ? (
-                                                            <div className="flex flex-col items-center justify-center py-8 space-y-2 text-muted-foreground text-sm">
-                                                                <Sparkles className="w-6 h-6 animate-spin text-primary" />
-                                                                <p className="text-xs">Consulting interviewer...</p>
-                                                            </div>
-                                                        ) : aiResponse && aiMode === 'hint' ? (
-                                                            renderAiResponse(aiResponse)
-                                                        ) : (
-                                                            <div className="text-sm text-muted-foreground bg-muted/20 p-4 rounded-lg italic text-center">
-                                                                Need a push? Click the button above to generate a dynamic hint based on your current code.
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </TabsContent>
-                                                
-                                                <TabsContent value="editorial" className="m-0 space-y-4">
-                                                    <div className="flex items-center justify-between border-b pb-2">
-                                                        <h3 className="font-heading font-bold text-sm">Editorial & Explanation</h3>
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="h-7 text-xs"
-                                                            onClick={() => askGemini('approach')}
-                                                            disabled={aiLoading}
-                                                        >
-                                                            🤖 Generate AI Editorial
-                                                        </Button>
-                                                    </div>
-
-                                                    <div className="space-y-3 pt-2">
-                                                        {aiLoading && aiMode === 'approach' ? (
-                                                            <div className="flex flex-col items-center justify-center py-8 space-y-2 text-muted-foreground text-sm">
-                                                                <Sparkles className="w-6 h-6 animate-spin text-primary" />
-                                                                <p className="text-xs">Synthesizing detailed solution guide...</p>
-                                                            </div>
-                                                        ) : aiResponse && aiMode === 'approach' ? (
-                                                            renderAiResponse(aiResponse)
-                                                        ) : (
-                                                            <div className="text-sm text-muted-foreground bg-muted/20 p-4 rounded-lg italic text-center">
-                                                                Click the button above to request a full algorithmic walkthrough and code strategy.
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </TabsContent>
-                                            </>
-                                        )}
                                     </div>
                                 </Tabs>
                             </Panel>
@@ -2442,11 +1938,7 @@ ${modeInstructions}`;
                                                 <TabsTrigger value="result" className="px-3 h-8 text-xs font-semibold data-[state=active]:bg-background">
                                                     💻 Result Console
                                                 </TabsTrigger>
-                                                {ENABLE_AI_ASSISTANT && (
-                                                    <TabsTrigger value="ai" className="px-3 h-8 text-xs font-semibold data-[state=active]:bg-background">
-                                                        🤖 AI Assistant
-                                                    </TabsTrigger>
-                                                )}
+
                                             </TabsList>
                                             
                                             <div className="flex-1 overflow-hidden relative">
@@ -2474,21 +1966,7 @@ ${modeInstructions}`;
                                                                 <AlertTriangle className="w-4 h-4 text-red-400" />
                                                                 Wrong Answer Detected
                                                             </span>
-                                                            {ENABLE_AI_ASSISTANT && (
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    className="h-7 text-xs border-red-500/30 hover:border-red-500 text-red-400 hover:bg-red-500/10 py-1"
-                                                                    onClick={() => {
-                                                                        setAiMode('wrong_answer');
-                                                                        askGemini('wrong_answer');
-                                                                        setBottomTab('ai');
-                                                                    }}
-                                                                    disabled={aiLoading}
-                                                                >
-                                                                    🤖 Explain with AI
-                                                                </Button>
-                                                            )}
+
                                                         </div>
                                                     )}
 
@@ -2498,157 +1976,11 @@ ${modeInstructions}`;
                                                                 <Info className="w-4 h-4 text-amber-400" />
                                                                 AI Analysis Available
                                                             </span>
-                                                            {ENABLE_AI_ASSISTANT && (
-                                                                <Button
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    className="h-7 text-xs border-amber-500/30 hover:border-amber-500 text-amber-400 hover:bg-amber-500/10 py-1"
-                                                                    onClick={() => {
-                                                                        setAiMode('error');
-                                                                        askGemini('error');
-                                                                        setBottomTab('ai');
-                                                                    }}
-                                                                    disabled={aiLoading}
-                                                                >
-                                                                    🤖 Analyze Error
-                                                                </Button>
-                                                            )}
+
                                                         </div>
                                                     )}
 
-                                                    {ENABLE_AI_ASSISTANT && (
-                                                        <TabsContent value="ai" className="m-0 p-4 h-full flex flex-col overflow-hidden bg-card">
-                                                            <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 mb-2 flex-shrink-0">
-                                                                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">🤖 AI Coding Helper</span>
-                                                                <div className="flex flex-wrap gap-1">
-                                                                    <Button
-                                                                        variant={aiMode === 'hint' ? 'default' : 'outline'}
-                                                                        className="h-7 text-xs px-2.5 py-1"
-                                                                        onClick={() => { setAiMode('hint'); askGemini('hint'); }}
-                                                                        disabled={aiLoading}
-                                                                    >
-                                                                        💡 Hint
-                                                                    </Button>
-                                                                    <Button
-                                                                        variant={aiMode === 'optimize' ? 'default' : 'outline'}
-                                                                        className="h-7 text-xs px-2.5 py-1"
-                                                                        onClick={() => { setAiMode('optimize'); askGemini('optimize'); }}
-                                                                        disabled={aiLoading}
-                                                                    >
-                                                                        ⚡ Optimize
-                                                                    </Button>
-                                                                    <Button
-                                                                        variant={aiMode === 'review' ? 'default' : 'outline'}
-                                                                        className="h-7 text-xs px-2.5 py-1"
-                                                                        onClick={() => { setAiMode('review'); askGemini('review'); }}
-                                                                        disabled={aiLoading}
-                                                                    >
-                                                                        🔍 Review
-                                                                    </Button>
-                                                                    <Button
-                                                                        variant={aiMode === 'approach' ? 'default' : 'outline'}
-                                                                        className="h-7 text-xs px-2.5 py-1"
-                                                                        onClick={() => { setAiMode('approach'); askGemini('approach'); }}
-                                                                        disabled={aiLoading}
-                                                                    >
-                                                                        🎓 Approach
-                                                                    </Button>
-                                                                    <Button
-                                                                        variant={aiMode === 'chat' ? 'default' : 'outline'}
-                                                                        className="h-7 text-xs px-2.5 py-1"
-                                                                        onClick={() => { setAiMode('chat'); }}
-                                                                        disabled={aiLoading}
-                                                                    >
-                                                                        💬 Chat
-                                                                    </Button>
-                                                                    <Button
-                                                                        variant="outline"
-                                                                        className="h-7 text-xs px-2.5 py-1 hover:bg-primary/10 border-primary/20"
-                                                                        onClick={() => { setShowAiDialog(true); }}
-                                                                    >
-                                                                        Maximize ↗
-                                                                    </Button>
-                                                                </div>
-                                                            </div>
 
-                                                            <div className="flex-1 overflow-hidden min-h-0 relative flex flex-col">
-                                                                {aiMode === 'chat' ? (
-                                                                    <div className="flex flex-col h-full space-y-3 justify-end">
-                                                                        <div className="flex-1 overflow-y-auto space-y-3 p-2 bg-muted/5 rounded-lg border border-border/40 scrollbar-thin">
-                                                                            {chatHistory.length === 0 ? (
-                                                                                <div className="text-center text-xs text-muted-foreground italic py-8">
-                                                                                    Ask me anything about this coding problem or your solution!
-                                                                                </div>
-                                                                            ) : (
-                                                                                chatHistory.map((msg, idx) => (
-                                                                                    <div key={idx} className={cn(
-                                                                                        "flex flex-col max-w-[85%] rounded-lg p-2.5 text-xs leading-relaxed",
-                                                                                        msg.sender === 'user'
-                                                                                            ? "bg-primary text-primary-foreground ml-auto rounded-tr-none"
-                                                                                            : "bg-muted text-foreground border mr-auto rounded-tl-none whitespace-pre-wrap font-sans"
-                                                                                    )}>
-                                                                                        <span className="font-bold mb-1 block opacity-75">
-                                                                                            {msg.sender === 'user' ? 'You' : 'AI Assistant'}
-                                                                                        </span>
-                                                                                        {msg.sender === 'user' ? msg.text : renderAiResponse(msg.text)}
-                                                                                    </div>
-                                                                                ))
-                                                                            )}
-                                                                            {aiLoading && (
-                                                                                <div className="bg-muted text-foreground border mr-auto rounded-lg rounded-tl-none p-2.5 text-xs max-w-[85%] flex items-center gap-1.5">
-                                                                                    <Sparkles className="w-3.5 h-3.5 animate-spin text-primary" />
-                                                                                    <span className="animate-pulse">Thinking...</span>
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                        
-                                                                        <div className="flex gap-2 flex-shrink-0">
-                                                                            <input
-                                                                                type="text"
-                                                                                value={chatInput}
-                                                                                onChange={(e) => setChatInput(e.target.value)}
-                                                                                onKeyDown={(e) => {
-                                                                                    if (e.key === 'Enter' && chatInput.trim() && !aiLoading) {
-                                                                                        askGemini('chat', chatInput);
-                                                                                        setChatInput('');
-                                                                                    }
-                                                                                }}
-                                                                                placeholder="Ask a question about the code..."
-                                                                                disabled={aiLoading}
-                                                                                className="flex-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                                                            />
-                                                                            <Button
-                                                                                size="sm"
-                                                                                disabled={!chatInput.trim() || aiLoading}
-                                                                                onClick={() => {
-                                                                                    askGemini('chat', chatInput);
-                                                                                    setChatInput('');
-                                                                                }}
-                                                                                className="h-9 px-3"
-                                                                            >
-                                                                                Send
-                                                                            </Button>
-                                                                        </div>
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="flex-1 overflow-y-auto border border-border/80 rounded-lg p-4 bg-muted/10">
-                                                                        {aiLoading ? (
-                                                                            <div className="flex flex-col items-center justify-center py-6 space-y-2 text-muted-foreground text-sm">
-                                                                                <Sparkles className="w-6 h-6 animate-spin text-primary" />
-                                                                                <p className="text-xs">Analyzing code and generating response...</p>
-                                                                            </div>
-                                                                        ) : aiResponse ? (
-                                                                            renderAiResponse(aiResponse)
-                                                                        ) : (
-                                                                            <p className="text-xs text-muted-foreground italic text-center py-4">
-                                                                                No recent AI interactions. Select actions or analyze results to get feedback.
-                                                                            </p>
-                                                                        )}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </TabsContent>
-                                                    )}
                                                 </TabsContent>
                                             </div>
                                         </Tabs>
@@ -2660,147 +1992,7 @@ ${modeInstructions}`;
                 </div>
             )}
 
-            {/* =====================================================
-                FEATURE: AI ASSISTANT MODAL
-                ===================================================== */}
-            {ENABLE_AI_ASSISTANT && (
-                <Dialog open={showAiDialog} onOpenChange={setShowAiDialog}>
-                    <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-                        <DialogHeader>
-                            <DialogTitle className="flex items-center gap-2 text-xl font-bold font-heading">
-                                <Brain className="w-5 h-5 text-primary" />
-                                AI Coding Assistant
-                            </DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 my-2">
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 flex-shrink-0">
-                                <Button
-                                    variant={aiMode === 'hint' ? 'default' : 'outline'}
-                                    size="sm"
-                                    onClick={() => { setAiMode('hint'); askGemini('hint'); }}
-                                    disabled={aiLoading}
-                                >
-                                    Hint
-                                </Button>
-                                <Button
-                                    variant={aiMode === 'approach' ? 'default' : 'outline'}
-                                    size="sm"
-                                    onClick={() => { setAiMode('approach'); askGemini('approach'); }}
-                                    disabled={aiLoading}
-                                >
-                                    Explain Approach
-                                </Button>
-                                <Button
-                                    variant={aiMode === 'optimize' ? 'default' : 'outline'}
-                                    size="sm"
-                                    onClick={() => { setAiMode('optimize'); askGemini('optimize'); }}
-                                    disabled={aiLoading}
-                                >
-                                    Optimize Code
-                                </Button>
-                                <Button
-                                    variant={aiMode === 'review' ? 'default' : 'outline'}
-                                    size="sm"
-                                    onClick={() => { setAiMode('review'); askGemini('review'); }}
-                                    disabled={aiLoading}
-                                >
-                                    Code Review
-                                </Button>
-                                <Button
-                                    variant={aiMode === 'chat' ? 'default' : 'outline'}
-                                    size="sm"
-                                    onClick={() => { setAiMode('chat'); }}
-                                    disabled={aiLoading}
-                                >
-                                    Chat Assistant
-                                </Button>
-                                <Button
-                                    variant={aiMode === 'solution' ? 'default' : 'outline'}
-                                    size="sm"
-                                    onClick={() => { setAiMode('solution'); askGemini('solution'); }}
-                                    disabled={aiLoading}
-                                    className="bg-red-500 hover:bg-red-600 text-white border-none"
-                                >
-                                    Reveal Solution
-                                </Button>
-                            </div>
 
-                            <div className="border rounded-lg bg-muted/40 p-4 min-h-[220px] overflow-hidden flex flex-col">
-                                {aiMode === 'chat' ? (
-                                    <div className="flex flex-col h-full space-y-3 justify-end">
-                                        <div className="flex-1 overflow-y-auto space-y-3 p-2 bg-muted/5 rounded-lg border border-border/40 max-h-[350px] scrollbar-thin">
-                                            {chatHistory.length === 0 ? (
-                                                <div className="text-center text-xs text-muted-foreground italic py-12">
-                                                    Ask me anything about this coding problem or your solution!
-                                                </div>
-                                            ) : (
-                                                chatHistory.map((msg, idx) => (
-                                                    <div key={idx} className={cn(
-                                                        "flex flex-col max-w-[85%] rounded-lg p-2.5 text-xs leading-relaxed",
-                                                        msg.sender === 'user'
-                                                            ? "bg-primary text-primary-foreground ml-auto rounded-tr-none"
-                                                            : "bg-muted text-foreground border mr-auto rounded-tl-none whitespace-pre-wrap font-sans"
-                                                    )}>
-                                                        <span className="font-bold mb-1 block opacity-75">
-                                                            {msg.sender === 'user' ? 'You' : 'AI Assistant'}
-                                                        </span>
-                                                        {msg.sender === 'user' ? msg.text : renderAiResponse(msg.text)}
-                                                    </div>
-                                                ))
-                                            )}
-                                            {aiLoading && (
-                                                <div className="bg-muted text-foreground border mr-auto rounded-lg rounded-tl-none p-2.5 text-xs max-w-[85%] flex items-center gap-1.5">
-                                                    <Sparkles className="w-3.5 h-3.5 animate-spin text-primary" />
-                                                    <span className="animate-pulse">Thinking...</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                        
-                                        <div className="flex gap-2 flex-shrink-0">
-                                            <input
-                                                type="text"
-                                                value={chatInput}
-                                                onChange={(e) => setChatInput(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' && chatInput.trim() && !aiLoading) {
-                                                        askGemini('chat', chatInput);
-                                                        setChatInput('');
-                                                    }
-                                                }}
-                                                placeholder="Ask a question about the code..."
-                                                disabled={aiLoading}
-                                                className="flex-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors"
-                                            />
-                                            <Button
-                                                size="sm"
-                                                disabled={!chatInput.trim() || aiLoading}
-                                                onClick={() => {
-                                                    askGemini('chat', chatInput);
-                                                    setChatInput('');
-                                                }}
-                                                className="h-9 px-3"
-                                            >
-                                                Send
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ) : aiLoading ? (
-                                    <div className="flex flex-col items-center justify-center py-12 space-y-2 text-muted-foreground text-sm">
-                                        <Sparkles className="w-8 h-8 animate-spin text-primary" />
-                                        <p>Generating response from Gemini...</p>
-                                    </div>
-                                ) : aiResponse ? (
-                                    <div className="max-h-[450px] overflow-y-auto pr-1 scrollbar-thin">
-                                        {renderAiResponse(aiResponse)}
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-muted-foreground italic text-center py-12">Select an option above to generate AI help.</p>
-                                )}
-                            </div>
-                        </div>
-                    </DialogContent>
-                </Dialog>
-            )}
 
             {/* =====================================================
                 FEATURE: NOTES MODAL
@@ -3017,19 +2209,10 @@ ${modeInstructions}`;
                                 <Button
                                     variant="outline"
                                     onClick={handleContinuePracticing}
-                                    className={cn("h-9 border-zinc-800 bg-transparent hover:bg-zinc-900 hover:text-white text-zinc-300 font-semibold text-xs transition-colors", !ENABLE_AI_ASSISTANT && "col-span-2")}
+                                    className="h-9 border-zinc-800 bg-transparent hover:bg-zinc-900 hover:text-white text-zinc-300 font-semibold text-xs transition-colors col-span-2"
                                 >
                                     Continue Practicing
                                 </Button>
-                                {ENABLE_AI_ASSISTANT && (
-                                    <Button
-                                        variant="outline"
-                                        onClick={handleViewSolutionAnalysis}
-                                        className="h-9 border-emerald-500/30 hover:border-emerald-500 bg-emerald-950/20 hover:bg-emerald-950/40 text-emerald-400 hover:text-emerald-300 font-semibold text-xs transition-colors"
-                                    >
-                                        Solution Analysis
-                                    </Button>
-                                )}
                             </div>
                         </div>
                     </div>

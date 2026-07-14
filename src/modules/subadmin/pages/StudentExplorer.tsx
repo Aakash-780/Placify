@@ -412,116 +412,13 @@ export default function StudentExplorer() {
         }
         setAiProcessing(true);
         try {
-            const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-
-            if (GEMINI_KEY && GEMINI_KEY !== 'your_gemini_api_key_here') {
-                // ── Gemini API ────────────────────────────────────────────
-                const prompt = `You are a student database search assistant. Convert the user query into JSON filters.
-
-AVAILABLE DATABASE FIELDS:
-- cgpa_min / cgpa_max (number 0-10): CGPA range ONLY.
-- branch: CSE, IT, ECE, EEE, MECH, CIVIL, MBA, MCA
-- skills (string[]): programming languages, frameworks, technologies
-- keywords (string[]): general keywords or phrases to search verbatim in their physical resume/bio
-- tenth_min (number 0-100): Minimum 10th grade / class 10 percentage requested.
-- twelfth_min (number 0-100): Minimum 12th grade / class 12 percentage requested.
-- internships_min (number): Minimum internships count requested.
-- sort_by_experience (boolean): Set to true if the user implies sorting by experience or most internships.
-
-RULES:
-1. ONLY output a field if explicitly requested. DO NOT guess the "branch" based on partial matching (e.g. do NOT extract "ECE" from the word "percentage", or "IT" from the word "with").
-2. If the user asks for certificates, add them to the 'keywords' array. If they ask for class 10 percentage > 85, set 'tenth_min' to 85. 
-3. Return ONLY raw JSON — no markdown, no code fences, no backticks.
-
-Query: "${aiQuery}"
-
-Return ONLY this exact JSON format (no other text):
-{"filters":{},"matched_keywords":[],"explanation":""}`;
-
-                let raw = "";
-                
-                try {
-                    const fetchWithRetry = async (url: string, options: RequestInit, retries = 3, delay = 1000): Promise<Response> => {
-                        try {
-                            const res = await fetch(url, options);
-                            if ((res.status === 503 || res.status === 429) && retries > 0) {
-                                console.warn(`Gemini API returned ${res.status}. Retrying in ${delay}ms... (${retries} retries left)`);
-                                await new Promise(resolve => setTimeout(resolve, delay));
-                                return fetchWithRetry(url, options, retries - 1, delay * 2);
-                            }
-                            return res;
-                        } catch (err) {
-                            if (retries > 0) {
-                                console.warn(`Gemini API fetch failed:`, err, `Retrying in ${delay}ms... (${retries} retries left)`);
-                                await new Promise(resolve => setTimeout(resolve, delay));
-                                return fetchWithRetry(url, options, retries - 1, delay * 2);
-                            }
-                            throw err;
-                        }
-                    };
-
-                    const res = await fetchWithRetry(
-                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
-                        {
-                            method: 'POST',
-                            headers: { 'content-type': 'application/json' },
-                            body: JSON.stringify({
-                                contents: [{ parts: [{ text: prompt }] }],
-                                generationConfig: { temperature: 0, maxOutputTokens: 400 },
-                            }),
-                        }
-                    );
-
-                    if (!res.ok) throw new Error(`Gemini API error ${res.status}`);
-                    const data = await res.json();
-                    raw = (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-                } catch (geminiError: any) {
-                    console.warn("Gemini failed, falling back to Grok:", geminiError);
-                    const GROK_KEY = import.meta.env.VITE_GROK_API_KEY;
-                    if (!GROK_KEY) throw geminiError; // cascade to offline script if no Grok key
-                    
-                    const grokRes = await fetch("https://api.x.ai/v1/chat/completions", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Authorization": `Bearer ${GROK_KEY}`
-                        },
-                        body: JSON.stringify({
-                            messages: [{ role: "user", content: prompt }],
-                            model: "grok-2-latest",
-                            temperature: 0,
-                            max_tokens: 400
-                        })
-                    });
-                    
-                    if (!grokRes.ok) throw new Error(`Grok API error ${grokRes.status}`);
-                    const grokData = await grokRes.json();
-                    raw = (grokData.choices?.[0]?.message?.content || '').trim();
-                }
-
-                // Strip markdown fences if present
-                raw = raw.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
-                const m = raw.match(/\{[\s\S]*\}/);
-                if (m) raw = m[0];
-                const parsed = JSON.parse(raw);
-                setAiFilters(parsed.filters || {});
-                setMatchedKeywords(parsed.matched_keywords || []);
-                setAiExplanation(parsed.explanation || 'Search applied via Gemini AI.');
-            } else {
-                // ── Local NLP fallback (no API key needed) ────────────────
-                await new Promise(r => setTimeout(r, 200));
-                const result = parseNaturalLanguageQuery(aiQuery);
-                setAiFilters(result.filters);
-                setMatchedKeywords(result.matched_keywords);
-                setAiExplanation(result.explanation);
-            }
-        } catch (err: any) {
-            console.error('AI search error:', err);
-            // Silently fall back to local parser on any API error
+            await new Promise(r => setTimeout(r, 200));
             const result = parseNaturalLanguageQuery(aiQuery);
             setAiFilters(result.filters);
             setMatchedKeywords(result.matched_keywords);
             setAiExplanation(result.explanation);
+        } catch (err: any) {
+            console.error('AI search error:', err);
         } finally {
             setAiProcessing(false);
         }

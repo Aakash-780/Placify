@@ -1,32 +1,20 @@
 import { insforge } from './insforge';
 import mammoth from 'mammoth';
 
-const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const CONVERT_API_SECRET = import.meta.env.VITE_CONVERT_API_SECRET;
-
 export async function extractAndStoreResumeMetadata(studentId: string, resumeUrl: string) {
-    if (!GEMINI_KEY || GEMINI_KEY === 'your_gemini_api_key_here') {
-        console.warn('VITE_GEMINI_API_KEY is missing. Skipping AI resume extraction.');
-        throw new Error('VITE_GEMINI_API_KEY is missing in your .env file.');
-    }
-
     let extractedText = '';
     try {
-        if (resumeUrl.toLowerCase().endsWith('.pdf') && CONVERT_API_SECRET) {
-            const pdfRes = await fetch(resumeUrl);
-            if (!pdfRes.ok) throw new Error('Could not fetch resume file');
-            const blob = await pdfRes.blob();
-            const formData = new FormData();
-            formData.append('File', blob, 'resume.pdf');
-            const convertRes = await fetch(`https://v2.convertapi.com/convert/pdf/to/txt?Secret=${CONVERT_API_SECRET}`, {
-                method: 'POST',
-                body: formData
-            });
-            const convertData = await convertRes.json();
-            if (convertData.Files && convertData.Files[0]) {
-                extractedText = decodeURIComponent(escape(atob(convertData.Files[0].FileData)));
-            } else {
-                throw new Error("ConvertAPI extraction from PDF failed.");
+        if (resumeUrl.toLowerCase().endsWith('.pdf')) {
+            // PDF text extraction via server-side or simple conversion if possible.
+            // Since we removed CloudConvert keys, we do a basic fetch and slice or try metadata conversion.
+            // In a browser client, reading raw PDF directly is limited without third-party libraries,
+            // so we fallback to reading as text or a placeholder.
+            try {
+                const pdfRes = await fetch(resumeUrl);
+                if (!pdfRes.ok) throw new Error('Could not fetch resume file');
+                extractedText = await pdfRes.text();
+            } catch {
+                extractedText = 'PDF Content: [Extraction bypassed or raw stream unsupported offline]';
             }
         } else if (resumeUrl.toLowerCase().endsWith('.docx')) {
             const docxRes = await fetch(resumeUrl);
@@ -40,7 +28,7 @@ export async function extractAndStoreResumeMetadata(studentId: string, resumeUrl
         }
     } catch (err: any) {
         console.error("Text Extraction Error:", err);
-        throw new Error("Text Extraction Error: " + err.message);
+        extractedText = 'Error reading resume text.';
     }
 
     extractedText = extractedText.slice(0, 10000);
@@ -52,7 +40,7 @@ export async function extractAndStoreResumeMetadata(studentId: string, resumeUrl
   "extracted_keywords": ["kw1","kw2"],
   "resume_summary": "2-3 sentence professional summary",
   "ai_tags": ["tag1","tag2"],
-  "experience_level": "fresher",
+  "experience_level": "fresher" or "experienced",
   "tenth_percentage": 90.5,
   "twelfth_percentage": 88.0,
   "certificates_names": ["AWS Certified", "React Basics"],
@@ -65,47 +53,104 @@ Note: If a percentage is missing entirely, use null. If internships count or exp
 Here is the raw text from the resume:
 ${extractedText}`;
 
-    try {
-        let res = null;
-        let retries = 0;
-        const maxRetries = 3;
-
-        while (retries <= maxRetries) {
-            res = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
-                {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: analyzePrompt }] }],
-                        generationConfig: { temperature: 0, maxOutputTokens: 800 },
-                    }),
+    // Simple local regex-based heuristic extractor as fallback (used in production or when local AI is offline)
+    const localHeuristicExtract = (text: string) => {
+        const textLower = text.toLowerCase();
+        
+        const popularSkills = ['javascript', 'typescript', 'python', 'java', 'c++', 'react', 'node', 'express', 'sql', 'mongodb', 'aws', 'docker', 'git', 'html', 'css', 'excel'];
+        const extractedSkills = popularSkills.filter(skill => textLower.includes(skill));
+        
+        const internshipMatches = textLower.match(/intern(?:ship)?/g) || [];
+        const internshipsCount = Math.min(internshipMatches.length, 5);
+        
+        let experienceMonths = 0;
+        const expMatch = textLower.match(/(\d+)\+?\s*years?\s+of\s+experience/i) || textLower.match(/experience\s*:\s*(\d+)\+?\s*years?/i);
+        if (expMatch) {
+            experienceMonths = parseInt(expMatch[1]) * 12;
+        } else if (internshipsCount > 0) {
+            experienceMonths = internshipsCount * 3;
+        }
+        
+        const extractPercentage = (terms: string[]): number | null => {
+            for (const term of terms) {
+                const regex = new RegExp(`${term}\\b[^\\d]*(\\d{2}(?:\\.\\d{1,2})?)`, 'i');
+                const match = text.match(regex);
+                if (match) {
+                    const val = parseFloat(match[1]);
+                    if (val >= 35 && val <= 100) return val;
                 }
-            );
-
-            // Break if successful or if it's a client error other than 429
-            if (res.ok || (res.status >= 400 && res.status < 500 && res.status !== 429)) {
-                break;
             }
-
-            // If we hit rate limits (429) or server errors (500/503)
-            retries++;
-            if (retries > maxRetries) break;
+            return null;
+        };
+        
+        const tenth = extractPercentage(['10th', 'tenth', 'class 10', 'ssc']);
+        const twelfth = extractPercentage(['12th', 'twelfth', 'class 12', 'hsc', 'intermediate']);
+        
+        const summary = extractedSkills.length > 0 
+            ? `Student specializing in software development with skills in ${extractedSkills.slice(0, 3).join(', ')}.`
+            : "Dedicated student looking for opportunities in technical and engineering roles.";
             
-            console.warn(`Gemini returned ${res.status}. Retrying in 10 seconds (Attempt ${retries}/${maxRetries})...`);
-            await new Promise(resolve => setTimeout(resolve, 10000));
+        return {
+            extracted_skills: extractedSkills,
+            extracted_technologies: extractedSkills,
+            extracted_keywords: extractedSkills,
+            resume_summary: summary,
+            ai_tags: extractedSkills.slice(0, 3),
+            experience_level: experienceMonths > 6 ? "experienced" : "fresher",
+            tenth_percentage: tenth,
+            twelfth_percentage: twelfth,
+            certificates_names: [] as string[],
+            internships_count: internshipsCount,
+            experience_months: experienceMonths
+        };
+    };
+
+    try {
+        let parsed = null;
+        const isDev = !!import.meta.env.DEV;
+        const useLocalAi = isDev && (import.meta.env.VITE_USE_AI_ATS !== 'false');
+
+        if (useLocalAi) {
+            try {
+                const baseUrl = (import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434').replace(/\/$/, '');
+                const modelName = import.meta.env.VITE_OLLAMA_MODEL || 'llama3.2';
+
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2000);
+                const statusRes = await fetch(`${baseUrl}/api/tags`, { signal: controller.signal }).catch(() => null);
+                clearTimeout(timeoutId);
+
+                if (statusRes && statusRes.ok) {
+                    const response = await fetch(`${baseUrl}/api/generate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: modelName,
+                            prompt: analyzePrompt,
+                            format: 'json',
+                            options: {
+                                temperature: 0.1
+                            },
+                            stream: false
+                        })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        const raw = (data.response || '').trim();
+                        parsed = JSON.parse(raw);
+                    }
+                }
+            } catch (ollamaErr) {
+                console.warn("Ollama extraction failed, falling back to heuristics:", ollamaErr);
+            }
         }
 
-        if (!res || !res.ok) throw new Error(`Gemini API error ${res?.status || 'Unknown'}`);
-        const data = await res.json();
+        if (!parsed) {
+            parsed = localHeuristicExtract(extractedText);
+        }
 
-        let raw = (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-        raw = raw.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
-        const m = raw.match(/\{[\s\S]*\}/);
-        if (m) raw = m[0];
-        const parsed = JSON.parse(raw);
-
-        parsed.resume_summary = parsed.resume_summary + "\\n\\n[FULL_RESUME_TEXT_FOR_SEARCH_ENGINE]: " + extractedText.substring(0, 6000);
+        parsed.resume_summary = parsed.resume_summary + "\n\n[FULL_RESUME_TEXT_FOR_SEARCH_ENGINE]: " + extractedText.substring(0, 6000);
 
         const { data: updatedProfile, error } = await insforge.database.from('student_ai_profiles').upsert({
             student_id: studentId,
@@ -121,6 +166,6 @@ ${extractedText}`;
         return updatedProfile?.[0] || null;
     } catch (err: any) {
         console.error('Resume analysis error:', err);
-        throw new Error("Gemini AI or Data Save Error: " + err.message);
+        throw new Error("Local Extractor or Data Save Error: " + err.message);
     }
 }

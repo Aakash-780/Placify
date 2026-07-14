@@ -1,7 +1,5 @@
 import { insforge } from '@/lib/insforge';
 
-const GEMINI_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-
 export function buildFallbackSummary(student: any, skills: string[] = [], projects: any[] = [], certificates: any[] = []): string {
     const branch = student.branch || '';
     const cgpa = student.cgpa ? Number(student.cgpa).toFixed(1) : '';
@@ -78,9 +76,22 @@ export async function generateStudentSummary(studentId: string): Promise<string>
         const certificates = (certsRes.data || []).map((c: any) => c.name);
         const aiProfile = aiProfileRes.data;
 
-        // Try using Gemini if API key is configured
-        if (GEMINI_KEY && GEMINI_KEY !== 'your_gemini_api_key_here') {
-            const prompt = `You are a professional hiring manager. Create a concise, professional 1-to-2 sentence summary (max 35 words) for a student's placement profile.
+        // Use local Ollama in development mode only
+        const isDev = !!import.meta.env.DEV;
+        const useLocalAi = isDev && (import.meta.env.VITE_USE_AI_ATS !== 'false');
+
+        if (useLocalAi) {
+            const baseUrl = (import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434').replace(/\/$/, '');
+            const modelName = import.meta.env.VITE_OLLAMA_MODEL || 'llama3.2';
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2000); // 2-second timeout
+                const statusRes = await fetch(`${baseUrl}/api/tags`, { signal: controller.signal }).catch(() => null);
+                clearTimeout(timeoutId);
+
+                if (statusRes && statusRes.ok) {
+                    const prompt = `You are a professional hiring manager. Create a concise, professional 1-to-2 sentence summary (max 35 words) for a student's placement profile.
 Focus on their core skills, key projects, and placement goals. Do NOT mention their name, and do NOT use placeholders. Keep it realistic, direct, and flowing naturally.
 
 Student Details:
@@ -95,42 +106,47 @@ Student Details:
 
 Return ONLY the summary text. No quotes, no markdown, no headings.`;
 
-            const res = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
-                {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: { temperature: 0.2, maxOutputTokens: 100 },
-                    }),
-                }
-            );
+                    const generateRes = await fetch(`${baseUrl}/api/generate`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            model: modelName,
+                            prompt: prompt,
+                            options: {
+                                temperature: 0.2
+                            },
+                            stream: false
+                        })
+                    });
 
-            if (res.ok) {
-                const resJson = await res.json();
-                let summary = (resJson.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-                summary = summary.replace(/^["']|["']$/g, ''); // strip outer quotes
-                if (summary) {
-                    // Update student_ai_profiles
-                    if (aiProfile) {
-                        await insforge.database
-                            .from('student_ai_profiles')
-                            .update({ resume_summary: summary })
-                            .eq('student_id', studentId);
-                    } else {
-                        await insforge.database
-                            .from('student_ai_profiles')
-                            .insert([{ student_id: studentId, resume_summary: summary }]);
+                    if (generateRes.ok) {
+                        const data = await generateRes.json();
+                        let summary = (data.response || '').trim();
+                        summary = summary.replace(/^["']|["']$/g, ''); // strip outer quotes
+                        if (summary) {
+                            // Update student_ai_profiles
+                            if (aiProfile) {
+                                await insforge.database
+                                    .from('student_ai_profiles')
+                                    .update({ resume_summary: summary })
+                                    .eq('student_id', studentId);
+                            } else {
+                                await insforge.database
+                                    .from('student_ai_profiles')
+                                    .insert([{ student_id: studentId, resume_summary: summary }]);
+                            }
+                            return summary;
+                        }
                     }
-                    return summary;
                 }
-            } else {
-                console.warn(`Gemini API returned status ${res.status} during summary generation.`);
+            } catch (ollamaErr) {
+                console.warn('Ollama summary generation failed, using heuristic fallback:', ollamaErr);
             }
         }
 
-        // Procedural fallback if Gemini fails or is not available
+        // Procedural fallback if in production or Ollama fails/is not available
         const fallbackSummary = buildFallbackSummary(student, skills, projects, certsRes.data || []);
         
         // Save the fallback summary so that we have a saved value in the DB as well
