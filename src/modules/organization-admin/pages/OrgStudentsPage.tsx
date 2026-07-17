@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useRole } from '@/context/RoleContext';
 import { insforge } from '@/lib/insforge';
 import { 
-  Users, GraduationCap, Search, CheckCircle, Clock, Award, Loader2, AlertCircle, RefreshCw, Calendar, FileText
+  Users, GraduationCap, Search, CheckCircle, Clock, Award, Loader2, AlertCircle, RefreshCw, Calendar, FileText, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,8 +18,10 @@ export default function OrgStudentsPage() {
   const orgId = roleData?.organization_id;
   const orgName = roleData?.organizations?.name || 'Organization';
 
-  const [activeTab, setActiveTab] = useState<PageTabType>('verification');
+  const [activeTab, setActiveTab] = useState<PageTabType>('cohort');
   const [students, setStudents] = useState<any[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 5;
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -87,6 +89,10 @@ export default function OrgStudentsPage() {
   useEffect(() => {
     loadData();
   }, [orgId]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterBranch, filterYear, filterStatus, activeTab]);
 
   // Verification actions for student
   async function handleStudentVerify(student: any, status: 'verified' | 'rejected' | 'suspended') {
@@ -199,6 +205,13 @@ export default function OrgStudentsPage() {
 
   // Filters calculations
   const filteredStudents = students.filter(s => {
+    if (activeTab === 'verification' && s.status === 'verified') {
+      return false;
+    }
+    if (activeTab === 'cohort' && s.status !== 'verified') {
+      return false;
+    }
+
     const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           (s.college_id && s.college_id.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesBranch = filterBranch === 'All' || s.branch === filterBranch;
@@ -206,6 +219,13 @@ export default function OrgStudentsPage() {
     const matchesStatus = filterStatus === 'All' || s.status === filterStatus.toLowerCase();
     return matchesSearch && matchesBranch && matchesYear && matchesStatus;
   });
+
+  const totalStudentsCount = filteredStudents.length;
+  const totalPages = Math.ceil(totalStudentsCount / ITEMS_PER_PAGE) || 1;
+  const safeCurrentPage = Math.min(currentPage, totalPages) || 1;
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalStudentsCount);
+  const paginatedStudents = filteredStudents.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   const uniqueBranches = Array.from(new Set(students.map(s => s.branch).filter(Boolean)));
   const uniqueYears = Array.from(new Set(students.map(s => s.current_year).filter(Boolean))).sort();
@@ -253,15 +273,20 @@ export default function OrgStudentsPage() {
         <div className="space-y-6 animate-fade-in">
           <div className="flex justify-between items-center">
             <div>
-              <h3 className="text-lg font-bold text-foreground">Students Registry</h3>
+              <div className="flex items-center gap-2.5">
+                <h3 className="text-lg font-bold text-foreground">Students Registry</h3>
+                <span className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 px-2.5 py-0.5 rounded text-[10px] font-bold">
+                  Total Count: {totalStudentsCount}
+                </span>
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">Manage and verify student accounts, CGPA, and placement information.</p>
             </div>
 
             {/* Sub-tab switcher */}
             <div className="flex bg-card p-1 border border-border rounded-xl text-xs font-bold gap-1">
               {[
-                { id: 'verification', label: 'Verification Queue' },
-                { id: 'cohort', label: 'Enrolled Cohort' }
+                { id: 'cohort', label: 'Enrolled Cohort' },
+                { id: 'verification', label: 'Verification Queue' }
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -337,15 +362,20 @@ export default function OrgStudentsPage() {
                     <div className="w-1/6">Branch & Year</div>
                     <div className="w-1/6">CGPA / Backlogs</div>
                     <div className="w-1/6">Status</div>
-                    <div className="w-1/6 text-right">Actions</div>
+                    <div className="w-1/6 text-center">Actions</div>
                   </div>
 
-                  {filteredStudents.length === 0 ? (
+                  {paginatedStudents.length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground text-sm">No students match verification filter criteria.</div>
                   ) : (
                     <div className="divide-y divide-slate-800">
-                      {filteredStudents.map(student => (
-                        <div key={student.id} className="flex p-4 items-center hover:bg-card/30 transition-colors text-sm">
+                      {paginatedStudents.map(student => (
+                        <div 
+                          key={student.id} 
+                          className="flex p-4 items-center hover:bg-card/30 transition-colors text-sm cursor-pointer group"
+                          onClick={() => setShowProfileDetails(student)}
+                          title="Click to view profile"
+                        >
                           <div className="w-1/6 flex items-center gap-3">
                             {student.profile_photo_url ? (
                               <img src={student.profile_photo_url} alt="" className="w-8 h-8 rounded-full object-cover border border-border" />
@@ -355,7 +385,7 @@ export default function OrgStudentsPage() {
                               </div>
                             )}
                             <div className="overflow-hidden">
-                              <span className="font-bold block text-foreground truncate">{student.name}</span>
+                              <span className="font-bold block text-foreground truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:underline">{student.name}</span>
                               <span className="text-xs text-muted-foreground block truncate max-w-[140px]">{student.email}</span>
                               {student.approved_by_name && (
                                 <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold block mt-0.5 truncate">
@@ -380,23 +410,17 @@ export default function OrgStudentsPage() {
                                student.status === 'rejected' ? 'Rejected' : 'Suspended'}
                             </Badge>
                           </div>
-                          <div className="w-1/6 flex justify-end gap-1.5">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-[10px] font-bold border-border hover:bg-card"
-                              onClick={() => setShowProfileDetails(student)}
-                            >
-                              View Profile
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-[10px] font-bold border-border hover:bg-card text-indigo-400 hover:text-indigo-300"
-                              onClick={() => setResetPasswordStudent(student)}
-                            >
-                              Reset Password
-                            </Button>
+                          <div className="w-1/6 flex justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            {student.status === 'verified' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-[10px] font-bold border-border hover:bg-card text-indigo-400 hover:text-indigo-300"
+                                onClick={() => setResetPasswordStudent(student)}
+                              >
+                                Reset Password
+                              </Button>
+                            )}
                             
                             {student.status !== 'verified' && (
                               <Button
@@ -441,12 +465,17 @@ export default function OrgStudentsPage() {
                     <div className="w-1/4">Student Name</div>
                     <div className="w-1/4">Branch & Year</div>
                     <div className="w-1/4">Account Status</div>
-                    <div className="w-1/4 text-right">Actions</div>
+                    <div className="w-1/4 text-center">Actions</div>
                   </div>
-                  {filteredStudents.map(student => (
-                    <div key={student.id} className="flex p-4 items-center hover:bg-card/30 text-sm">
+                  {paginatedStudents.map(student => (
+                    <div 
+                      key={student.id} 
+                      className="flex p-4 items-center hover:bg-card/30 text-sm cursor-pointer group"
+                      onClick={() => setShowProfileDetails(student)}
+                      title="Click to view profile"
+                    >
                       <div className="w-1/4">
-                        <span className="font-semibold text-foreground block">{student.name}</span>
+                        <span className="font-semibold text-foreground block group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:underline">{student.name}</span>
                         {student.approved_by_name && (
                           <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold block mt-0.5">
                             Approved by {student.approved_by_name}
@@ -459,15 +488,7 @@ export default function OrgStudentsPage() {
                           {student.account_status}
                         </Badge>
                       </div>
-                      <div className="w-1/4 flex justify-end gap-1.5">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-[10px] font-bold border-border"
-                            onClick={() => setShowProfileDetails(student)}
-                          >
-                            View Profile
-                          </Button>
+                      <div className="w-1/4 flex justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                           <Button
                             size="sm"
                             variant="outline"
@@ -495,12 +516,58 @@ export default function OrgStudentsPage() {
                       </div>
                     </div>
                   ))}
-                  {filteredStudents.length === 0 && (
+                  {paginatedStudents.length === 0 && (
                     <div className="p-8 text-center text-muted-foreground text-sm">No students found.</div>
                   )}
                 </div>
               )}
             </div>
+
+            {/* Pagination Controls */}
+            {totalStudentsCount > 0 && (
+              <div className="p-4 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground bg-card/20">
+                <div>
+                  Showing <span className="font-semibold text-foreground">{startIndex + 1}</span> to{' '}
+                  <span className="font-semibold text-foreground">{endIndex}</span> of{' '}
+                  <span className="font-semibold text-foreground">{totalStudentsCount}</span> students
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={safeCurrentPage <= 1}
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    className="h-8 border-border bg-card/50 hover:bg-card text-foreground text-[10px] font-bold px-3 rounded-lg flex items-center"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Previous
+                  </Button>
+                  <div className="flex items-center gap-1 font-mono text-[10px] text-foreground font-bold">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setCurrentPage(p)}
+                        className={`w-7 h-7 rounded-lg transition-colors ${
+                          p === safeCurrentPage
+                            ? 'bg-indigo-600 text-white'
+                            : 'hover:bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={safeCurrentPage >= totalPages}
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    className="h-8 border-border bg-card/50 hover:bg-card text-foreground text-[10px] font-bold px-3 rounded-lg flex items-center"
+                  >
+                    Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </Card>
         </div>
       )}

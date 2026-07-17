@@ -4,7 +4,7 @@ import { createClient } from '@insforge/sdk';
 import { insforge } from '@/lib/insforge';
 import { 
   ShieldCheck, Plus, Edit2, Trash2, Key, UserCheck, UserX, AlertCircle, 
-  RefreshCw, Loader2, Check, Calendar
+  RefreshCw, Loader2, Check, Calendar, Search, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,9 @@ export default function OrgSubadminsPage() {
   const orgName = roleData?.organizations?.name || 'Organization';
 
   const [subadmins, setSubadmins] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 5;
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -207,6 +210,23 @@ export default function OrgSubadminsPage() {
     }
   }
 
+  const filteredSubadmins = subadmins.filter(sub => {
+    const query = searchQuery.toLowerCase();
+    return (
+      (sub.name || '').toLowerCase().includes(query) ||
+      (sub.email || '').toLowerCase().includes(query) ||
+      (sub.department || '').toLowerCase().includes(query) ||
+      (sub.role || '').toLowerCase().includes(query)
+    );
+  });
+
+  const totalSubadminsCount = filteredSubadmins.length;
+  const totalPages = Math.ceil(totalSubadminsCount / ITEMS_PER_PAGE) || 1;
+  const safeCurrentPage = Math.min(currentPage, totalPages) || 1;
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalSubadminsCount);
+  const paginatedSubadmins = filteredSubadmins.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
   return (
     <div className="flex-1 flex flex-col min-h-screen bg-background font-sans text-foreground p-8 space-y-8 max-w-7xl mx-auto w-full">
       {toast && (
@@ -247,17 +267,36 @@ export default function OrgSubadminsPage() {
         </div>
       ) : (
         <div className="space-y-6 animate-fade-in">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h3 className="text-lg font-bold text-foreground">SubAdmins Registry</h3>
+              <div className="flex items-center gap-2.5">
+                <h3 className="text-lg font-bold text-foreground">SubAdmins Registry</h3>
+                <span className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 px-2.5 py-0.5 rounded text-[10px] font-bold">
+                  Total Count: {totalSubadminsCount}
+                </span>
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">Manage credentials and departments for academic placement coordinators.</p>
             </div>
             <Button
               onClick={() => { setSubadminPassword(generatePassword()); setSubadminError(''); setShowCreateSubadmin(true); }}
-              className="bg-indigo-600 hover:bg-indigo-500 text-foreground text-xs font-bold px-4 h-10 rounded-xl"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 h-10 rounded-xl whitespace-nowrap"
             >
               <Plus className="w-4 h-4 mr-1.5" /> Create SubAdmin
             </Button>
+          </div>
+
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search subadmins by name, email, department..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="pl-9 h-11 w-full bg-card border-border text-xs text-foreground rounded-xl placeholder:text-muted-foreground"
+            />
           </div>
 
           <Card className="border border-border overflow-hidden bg-card/60 shadow-xl">
@@ -271,16 +310,18 @@ export default function OrgSubadminsPage() {
                     <th className="p-4">Role</th>
                     <th className="p-4">Status</th>
                     <th className="p-4">Created Date</th>
-                    <th className="p-4 text-right">Actions</th>
+                    <th className="p-4 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {subadmins.length === 0 ? (
+                  {paginatedSubadmins.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="p-8 text-center text-sm text-muted-foreground">No SubAdmins found.</td>
+                      <td colSpan={7} className="p-8 text-center text-sm text-muted-foreground">
+                        {subadmins.length === 0 ? 'No SubAdmins found.' : 'No matching subadmins found.'}
+                      </td>
                     </tr>
                   ) : (
-                    subadmins.map(sub => (
+                    paginatedSubadmins.map(sub => (
                       <tr key={sub.id} className="hover:bg-card/30 transition-colors border-b border-border">
                         <td className="p-4 font-semibold text-foreground text-sm">{sub.name}</td>
                         <td className="p-4 font-mono text-foreground/80 text-xs">{sub.email}</td>
@@ -298,50 +339,52 @@ export default function OrgSubadminsPage() {
                         <td className="p-4 text-foreground/80 text-sm">
                           {new Date(sub.created_at).toLocaleDateString()}
                         </td>
-                        <td className="p-4 flex gap-2 justify-end">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-blue-400 hover:text-blue-500"
-                            onClick={() => {
-                              setSubadminName(sub.name);
-                              setSubadminDept(sub.department);
-                              setSubadminRole(sub.role);
-                              setShowEditSubadmin(sub);
-                            }}
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-yellow-400 hover:text-yellow-500"
-                            onClick={() => toggleSubadminStatus(sub)}
-                            title="Suspend / Activate"
-                          >
-                            {sub.status === 'Active' ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-purple-400 hover:text-purple-500"
-                            onClick={() => {
-                              setResetPassVal(generatePassword());
-                              setResetSuccess(null);
-                              setShowResetPass(sub);
-                            }}
-                            title="Reset Password"
-                          >
-                            <Key className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-red-400 hover:text-red-500"
-                            onClick={() => handleDeleteSubadmin(sub)}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                        <td className="p-4">
+                          <div className="flex gap-2 justify-center">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-blue-400 hover:text-blue-500"
+                              onClick={() => {
+                                setSubadminName(sub.name);
+                                setSubadminDept(sub.department);
+                                setSubadminRole(sub.role);
+                                setShowEditSubadmin(sub);
+                              }}
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-yellow-400 hover:text-yellow-500"
+                              onClick={() => toggleSubadminStatus(sub)}
+                              title="Suspend / Activate"
+                            >
+                              {sub.status === 'Active' ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-purple-400 hover:text-purple-500"
+                              onClick={() => {
+                                setResetPassVal(generatePassword());
+                                setResetSuccess(null);
+                                setShowResetPass(sub);
+                              }}
+                              title="Reset Password"
+                            >
+                              <Key className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-red-400 hover:text-red-500"
+                              onClick={() => handleDeleteSubadmin(sub)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -349,6 +392,52 @@ export default function OrgSubadminsPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalSubadminsCount > 0 && (
+              <div className="p-4 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground bg-card/20">
+                <div>
+                  Showing <span className="font-semibold text-foreground">{startIndex + 1}</span> to{' '}
+                  <span className="font-semibold text-foreground">{endIndex}</span> of{' '}
+                  <span className="font-semibold text-foreground">{totalSubadminsCount}</span> subadmins
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={safeCurrentPage <= 1}
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    className="h-8 border-border bg-card/50 hover:bg-card text-foreground text-[10px] font-bold px-3 rounded-lg flex items-center"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Previous
+                  </Button>
+                  <div className="flex items-center gap-1 font-mono text-[10px] text-foreground font-bold">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setCurrentPage(p)}
+                        className={`w-7 h-7 rounded-lg transition-colors ${
+                          p === safeCurrentPage
+                            ? 'bg-indigo-600 text-white'
+                            : 'hover:bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={safeCurrentPage >= totalPages}
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    className="h-8 border-border bg-card/50 hover:bg-card text-foreground text-[10px] font-bold px-3 rounded-lg flex items-center"
+                  >
+                    Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </Card>
         </div>
       )}

@@ -3783,7 +3783,12 @@ export default function App() {
         const subType = showViewOrgModal.subscription_type || 'Trial';
         const subStatus = showViewOrgModal.subscription_status || 'Active';
         const subStart = showViewOrgModal.subscription_start_date;
-        const subEnd = showViewOrgModal.subscription_end_date;
+        let subEnd = showViewOrgModal.subscription_end_date;
+        if (!subEnd && subStart && subType !== 'Lifetime') {
+          const d = new Date(subStart);
+          d.setMonth(d.getMonth() + 12);
+          subEnd = d.toISOString();
+        }
         const daysRemaining = subEnd ? Math.ceil((new Date(subEnd).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : null;
 
         const startDateStr = subStart ? new Date(subStart).toLocaleDateString() : 'N/A';

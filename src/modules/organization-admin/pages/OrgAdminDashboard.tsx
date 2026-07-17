@@ -286,7 +286,12 @@ export default function OrgAdminDashboard() {
   const subscription_type = orgData?.subscription_type || 'Trial';
   const subscription_status = orgData?.subscription_status || 'Active';
   const subscription_start_date = orgData?.subscription_start_date;
-  const subscription_end_date = orgData?.subscription_end_date;
+  let subscription_end_date = orgData?.subscription_end_date;
+  if (!subscription_end_date && subscription_start_date && subscription_type !== 'Lifetime') {
+    const d = new Date(subscription_start_date);
+    d.setMonth(d.getMonth() + 12);
+    subscription_end_date = d.toISOString();
+  }
   const daysRemaining = subscription_end_date 
     ? Math.ceil((new Date(subscription_end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) 
     : null;
