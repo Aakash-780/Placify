@@ -233,7 +233,16 @@ export default function Applicants() {
     const [previewError, setPreviewError] = useState<boolean>(false);
     const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
-    // Fetch PDF as Blob and generate a local Object URL to prevent auto-download
+    const isImageFile = (name: string, url: string, mimeType?: string) => {
+        if (mimeType && mimeType.startsWith('image/')) return true;
+        const lowerName = (name || '').toLowerCase();
+        const lowerUrl = (url || '').toLowerCase();
+        return /\.(png|jpe?g|webp|gif|svg|bmp|ico)(\?.*)?$/i.test(lowerName) || 
+               /\.(png|jpe?g|webp|gif|svg|bmp|ico)(\?.*)?$/i.test(lowerUrl) ||
+               lowerUrl.startsWith('data:image/');
+    };
+
+    // Fetch Document as Blob and generate a local Object URL to prevent auto-download
     const handleOpenPreview = async (url: string, name: string) => {
         if (!url) return;
         setPreviewResumeUrl(url);
@@ -252,16 +261,21 @@ export default function Applicants() {
             console.log('[ResumePreview] Fetching document via URL:', url);
             const response = await fetch(url);
             if (!response.ok) throw new Error(`Failed to fetch document: HTTP ${response.status}`);
-            let blob = await response.blob();
+            let fetchedBlob = await response.blob();
             
-            // Re-wrap blob as application/pdf to bypass Content-Disposition headers
-            blob = new Blob([blob], { type: 'application/pdf' });
+            const isImg = isImageFile(name, url, fetchedBlob.type);
+            let finalBlob = fetchedBlob;
+            if (!fetchedBlob.type || fetchedBlob.type === 'application/octet-stream') {
+                finalBlob = new Blob([fetchedBlob], { type: isImg ? 'image/png' : 'application/pdf' });
+            } else if (!isImg && !fetchedBlob.type.includes('pdf')) {
+                finalBlob = new Blob([fetchedBlob], { type: 'application/pdf' });
+            }
             
-            const bUrl = URL.createObjectURL(blob);
+            const bUrl = URL.createObjectURL(finalBlob);
             setPreviewBlobUrl(bUrl);
         } catch (err: any) {
-            console.error('[ResumePreview] Fetch failed:', err);
-            setPreviewError(true);
+            console.error('[ResumePreview] Fetch failed, fallback to direct URL:', err);
+            setPreviewBlobUrl(url);
         } finally {
             setPreviewLoading(false);
         }
@@ -1366,23 +1380,37 @@ export default function Applicants() {
                                 </div>
                             </div>
                         )}
-                        {previewBlobUrl && (
-                            <div className="w-full h-full overflow-auto flex justify-center items-start p-4">
-                                <div 
-                                    style={{
-                                        width: `${previewZoom}%`,
-                                        height: `${previewZoom}%`,
-                                        minHeight: '65vh'
-                                    }}
-                                    className="transition-all duration-200"
-                                >
-                                    <iframe
-                                        src={`${previewBlobUrl}#toolbar=0`}
-                                        className="w-full h-full border-0 rounded-md bg-white shadow-xl"
+                        {(previewBlobUrl || previewResumeUrl) && !previewError && (
+                            isImageFile(previewResumeName, previewResumeUrl || '') ? (
+                                <div className="w-full h-full overflow-auto flex justify-center items-center p-4">
+                                    <img 
+                                        src={previewBlobUrl || previewResumeUrl || ''} 
+                                        alt={previewResumeName} 
+                                        style={{ transform: `scale(${previewZoom / 100})`, transformOrigin: 'center center' }}
+                                        className="max-w-full max-h-full object-contain rounded-md shadow-xl transition-transform duration-200"
                                         onLoad={() => setPreviewLoading(false)}
+                                        onError={() => { setPreviewError(true); setPreviewLoading(false); }}
                                     />
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="w-full h-full overflow-auto flex justify-center items-start p-4">
+                                    <div 
+                                        style={{
+                                            width: `${previewZoom}%`,
+                                            height: `${previewZoom}%`,
+                                            minHeight: '65vh'
+                                        }}
+                                        className="transition-all duration-200"
+                                    >
+                                        <iframe
+                                            src={`${previewBlobUrl || previewResumeUrl}#toolbar=0`}
+                                            className="w-full h-full border-0 rounded-md bg-white shadow-xl"
+                                            onLoad={() => setPreviewLoading(false)}
+                                            onError={() => { setPreviewError(true); setPreviewLoading(false); }}
+                                        />
+                                    </div>
+                                </div>
+                            )
                         )}
                     </div>
                 </DialogContent>

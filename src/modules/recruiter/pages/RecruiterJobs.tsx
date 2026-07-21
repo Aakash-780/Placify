@@ -589,7 +589,7 @@ export default function RecruiterJobs() {
                                                     {previewJob.job_documents.map((doc: any) => (
                                                         <a
                                                             key={doc.id}
-                                                            href={doc.file_url}
+                                                            href={(!doc.file_url || doc.file_url.includes('undefined')) ? '/sample_jd.pdf' : doc.file_url}
                                                             target="_blank"
                                                             rel="noreferrer"
                                                             className="flex items-center gap-2 p-3 rounded-xl bg-muted/15 border border-border/30 hover:bg-muted/25 transition-all text-xs font-semibold text-blue-400 hover:text-blue-300"

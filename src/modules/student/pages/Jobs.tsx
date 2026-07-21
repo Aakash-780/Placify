@@ -10,9 +10,9 @@ import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
     Briefcase, MapPin, Clock, Search, Heart, Filter, IndianRupee,
-    Building2, Calendar, ChevronRight, Bookmark, AlertCircle, CheckCircle,
+    Building2, Calendar, ChevronRight, ChevronLeft, Bookmark, AlertCircle, CheckCircle,
     FileText, Globe, Plus, Trash2, RotateCcw, TrendingUp, Sparkles, Eye,
-    ArrowUpRight, Archive, XCircle, Users, MoreVertical
+    ArrowUpRight, Archive, XCircle, Users, MoreVertical, X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { 
@@ -55,6 +55,12 @@ export default function Jobs() {
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'draft' | 'archived'>('all');
     const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'deadline' | 'company' | 'ctc'>('newest');
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 10;
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [search, typeFilter, statusFilter, sortBy, jobFilter]);
 
     const handleArchiveToggle = async (job: any) => {
         // Recruiter can never reach this page, but keep company guard just in case
@@ -479,15 +485,25 @@ export default function Jobs() {
                                     );
                                 })}
                             </div>
-                            <div className="flex flex-col sm:flex-row gap-3">
-                                <div className="relative flex-1">
+                            <div className="flex flex-col sm:flex-row gap-3 items-center">
+                                <div className="relative flex-1 w-full">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                     <Input
                                         placeholder="Search placements by company, role, or skills..."
-                                        className="pl-10 h-9"
+                                        className="pl-10 pr-9 h-9"
                                         value={search}
                                         onChange={e => setSearch(e.target.value)}
                                     />
+                                    {search && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setSearch('')}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded-full hover:bg-muted/50 transition-colors"
+                                            title="Clear search query"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
                                 </div>
                                 <Select value={typeFilter} onValueChange={setTypeFilter}>
                                     <SelectTrigger className="w-full sm:w-[150px] h-9">
@@ -511,6 +527,24 @@ export default function Jobs() {
                                         <SelectItem value="ctc">CTC / Compensation</SelectItem>
                                     </SelectContent>
                                 </Select>
+
+                                {(Boolean(search.trim()) || typeFilter !== 'all' || sortBy !== 'newest' || statusFilter !== 'all') && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                            setSearch('');
+                                            setTypeFilter('all');
+                                            setSortBy('newest');
+                                            setStatusFilter('all');
+                                        }}
+                                        className="h-9 px-3 text-xs font-semibold text-muted-foreground hover:text-foreground border-border/80 hover:bg-card/80 flex items-center gap-1.5 whitespace-nowrap transition-all"
+                                        title="Clear all active filters"
+                                    >
+                                        <RotateCcw className="w-3.5 h-3.5" />
+                                        <span>Clear Filters</span>
+                                    </Button>
+                                )}
                             </div>
                         </div>
 
@@ -526,160 +560,209 @@ export default function Jobs() {
                                     No placements found matching the selected filters.
                                 </CardContent>
                             </Card>
-                        ) : (
-                            <div className="space-y-3">
-                                {sortedAndFilteredJobs.map(job => {
-                                    const expired = isExpired(job.application_deadline);
-                                    const locations = parseArrayDisplay(job.location);
-                                    const branches = parseArrayDisplay(job.allowed_branches);
-                                    const years = parseArrayDisplay(job.allowed_years);
-                                    const gradYears = parseArrayDisplay(job.allowed_graduation_years);
+                        ) : (() => {
+                            const totalJobsCount = sortedAndFilteredJobs.length;
+                            const totalPages = Math.ceil(totalJobsCount / ITEMS_PER_PAGE) || 1;
+                            const safeCurrentPage = Math.min(currentPage, totalPages) || 1;
+                            const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+                            const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalJobsCount);
+                            const paginatedSortedAndFilteredJobs = sortedAndFilteredJobs.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-                                    return (
-                                        <Card key={job.id} className="border-border/40 bg-card/60 backdrop-blur-sm hover:shadow-sm transition-all duration-200">
-                                            <CardContent className="p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                                                <div className="space-y-1.5 flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        <h3 className="font-heading font-bold text-lg text-foreground truncate">{job.title}</h3>
-                                                        <Badge variant={job.job_type === 'internship' ? 'warning' : 'secondary'} className="capitalize text-[10px] font-semibold py-0.5">
-                                                            {job.job_type || 'Job'}
-                                                        </Badge>
-                                                        {job.work_mode && (
-                                                            <Badge variant="outline" className="text-[10px] font-semibold py-0.5">
-                                                                {job.work_mode}
+                            return (
+                                <div className="space-y-3">
+                                    {paginatedSortedAndFilteredJobs.map(job => {
+                                        const expired = isExpired(job.application_deadline);
+                                        const locations = parseArrayDisplay(job.location);
+                                        const branches = parseArrayDisplay(job.allowed_branches);
+                                        const years = parseArrayDisplay(job.allowed_years);
+                                        const gradYears = parseArrayDisplay(job.allowed_graduation_years);
+
+                                        return (
+                                            <Card key={job.id} className="border-border/40 bg-card/60 backdrop-blur-sm hover:shadow-sm transition-all duration-200">
+                                                <CardContent className="p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                                    <div className="space-y-1.5 flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <h3 className="font-heading font-bold text-lg text-foreground truncate">{job.title}</h3>
+                                                            <Badge variant={job.job_type === 'internship' ? 'warning' : 'secondary'} className="capitalize text-[10px] font-semibold py-0.5">
+                                                                {job.job_type || 'Job'}
                                                             </Badge>
-                                                        )}
-                                                        <Badge 
-                                                            className={cn(
-                                                                "text-[10px] py-0.5 px-2 font-semibold border capitalize tracking-wide",
-                                                                job.status === 'active' && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-                                                                job.status === 'draft' && "bg-amber-500/10 text-amber-500 border-amber-500/20",
-                                                                job.status === 'archived' && "bg-gray-500/10 text-gray-500 border-gray-500/20"
+                                                            {job.work_mode && (
+                                                                <Badge variant="outline" className="text-[10px] font-semibold py-0.5">
+                                                                    {job.work_mode}
+                                                                </Badge>
                                                             )}
-                                                        >
-                                                            {job.status}
-                                                        </Badge>
-                                                        {expired && (
-                                                            <Badge variant="destructive" className="text-[10px] font-semibold py-0.5 flex items-center gap-0.5">
-                                                                <Clock className="w-3 h-3" /> Expired
+                                                            <Badge 
+                                                                className={cn(
+                                                                    "text-[10px] py-0.5 px-2 font-semibold border capitalize tracking-wide",
+                                                                    job.status === 'active' && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+                                                                    job.status === 'draft' && "bg-amber-500/10 text-amber-500 border-amber-500/20",
+                                                                    job.status === 'archived' && "bg-gray-500/10 text-gray-500 border-gray-500/20"
+                                                                )}
+                                                            >
+                                                                {job.status}
                                                             </Badge>
-                                                        )}
-                                                    </div>
+                                                            {expired && (
+                                                                <Badge variant="destructive" className="text-[10px] font-semibold py-0.5 flex items-center gap-0.5">
+                                                                    <Clock className="w-3 h-3" /> Expired
+                                                                </Badge>
+                                                            )}
+                                                        </div>
 
-                                                    <p className="text-sm font-semibold text-muted-foreground">
-                                                        {job.company} — <span className="font-normal text-muted-foreground/80">{locations.join(', ') || 'Not specified'}</span>
-                                                    </p>
+                                                        <p className="text-sm font-semibold text-muted-foreground">
+                                                            {job.company} — <span className="font-normal text-muted-foreground/80">{locations.join(', ') || 'Not specified'}</span>
+                                                        </p>
 
-                                                    <div className="text-xs text-muted-foreground flex gap-x-4 gap-y-1 mt-1.5 flex-wrap items-center">
-                                                        <span className="flex items-center gap-1"><IndianRupee className="w-3.5 h-3.5 shrink-0" /><strong>{job.ctc ? `${job.ctc} LPA` : job.stipend ? `₹${job.stipend}/mo` : 'Not specified'}</strong></span>
-                                                        <span className="hidden sm:inline text-border/40">•</span>
-                                                        <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 shrink-0" /> Deadline: {job.application_deadline ? new Date(job.application_deadline).toLocaleDateString('en-IN') : 'Rolling'}</span>
-                                                        <span className="hidden sm:inline text-border/40">•</span>
-                                                        <span>{job.num_rounds || 0} Selection Rounds</span>
-                                                    </div>
+                                                        <div className="text-xs text-muted-foreground flex gap-x-4 gap-y-1 mt-1.5 flex-wrap items-center">
+                                                            <span className="flex items-center gap-1"><IndianRupee className="w-3.5 h-3.5 shrink-0" /><strong>{job.ctc ? `${job.ctc} LPA` : job.stipend ? `₹${job.stipend}/mo` : 'Not specified'}</strong></span>
+                                                            <span className="hidden sm:inline text-border/40">•</span>
+                                                            <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 shrink-0" /> Deadline: {job.application_deadline ? new Date(job.application_deadline).toLocaleDateString('en-IN') : 'Rolling'}</span>
+                                                            <span className="hidden sm:inline text-border/40">•</span>
+                                                            <span>{job.num_rounds || 0} Selection Rounds</span>
+                                                        </div>
 
-                                                    <div className="text-[11px] text-muted-foreground/80 flex flex-wrap gap-x-3 gap-y-0.5 pt-1">
-                                                        <span>Branches: <strong className="font-medium text-foreground/75">{branches.join(', ') || 'All'}</strong></span>
-                                                        <span>•</span>
-                                                        <span>Years: <strong className="font-medium text-foreground/75">{years.map(y => getYearDisplay(y)).join(', ') || 'All'}</strong></span>
-                                                        {gradYears.length > 0 && (
-                                                            <>
+                                                            <div className="text-[11px] text-muted-foreground/80 flex flex-wrap gap-x-3 gap-y-0.5 pt-1">
+                                                                <span>Branches: <strong className="font-medium text-foreground/75">{branches.join(', ') || 'All'}</strong></span>
                                                                 <span>•</span>
-                                                                <span>Grad Years: <strong className="font-medium text-foreground/75">{gradYears.join(', ')}</strong></span>
-                                                            </>
-                                                        )}
-                                                        {parseFloat(job.min_cgpa) > 0 && (
-                                                            <>
-                                                                <span>•</span>
-                                                                <span>Min CGPA: <strong className="font-medium text-foreground/75">{job.min_cgpa}</strong></span>
-                                                            </>
-                                                        )}
+                                                                <span>Years: <strong className="font-medium text-foreground/75">{years.map(y => getYearDisplay(y)).join(', ') || 'All'}</strong></span>
+                                                                {parseFloat(job.min_cgpa) > 0 && (
+                                                                <>
+                                                                    <span>•</span>
+                                                                    <span>Min CGPA: <strong className="font-medium text-foreground/75">{job.min_cgpa}</strong></span>
+                                                                </>
+                                                            )}
+                                                        </div>
                                                     </div>
+
+                                                     {/* Moderation Actions on the Right */}
+                                                     <div className="flex items-center gap-2.5 w-full md:w-auto flex-shrink-0 pt-2 md:pt-0 border-t md:border-0 border-border/10 justify-end">
+                                                         {/* 1. View Applicants (Prominent Primary Action) */}
+                                                         <Button
+                                                             variant="default"
+                                                             size="sm"
+                                                             onClick={() => navigate(`/admin/applicants?jobId=${job.id}`)}
+                                                             className="h-9 text-xs px-4 bg-primary hover:bg-primary/95 text-primary-foreground font-bold shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-1.5"
+                                                         >
+                                                             <Users className="w-4 h-4" /> 
+                                                             <span>Applicants</span>
+                                                         </Button>
+                                                         
+                                                         <Button
+                                                             variant="outline"
+                                                             size="sm"
+                                                             onClick={() => navigate(`/jobs/${job.id}`)}
+                                                             className="h-9 text-xs px-3 border-border dark:border-white/10 bg-background dark:bg-slate-950/40 hover:bg-muted dark:hover:bg-white/5 text-foreground hover:text-foreground dark:text-slate-200 dark:hover:text-white font-bold transition-all"
+                                                         >
+                                                             <Eye className="w-4 h-4 mr-1.5 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-100" />
+                                                             <span>View</span>
+                                                         </Button>
+
+                                                         <DropdownMenu>
+                                                             <DropdownMenuTrigger asChild>
+                                                                 <Button
+                                                                     variant="outline"
+                                                                     size="icon"
+                                                                     className="h-9 w-9 border-border dark:border-white/10 bg-background dark:bg-slate-950/40 hover:bg-muted dark:hover:bg-white/5 text-muted-foreground hover:text-foreground dark:text-slate-300 dark:hover:text-white rounded-lg transition-all"
+                                                                 >
+                                                                     <MoreVertical className="w-4 h-4" />
+                                                                 </Button>
+                                                             </DropdownMenuTrigger>
+                                                             <DropdownMenuContent align="end" className="bg-popover border border-border dark:bg-slate-900 dark:border-white/10 text-popover-foreground dark:text-slate-200 w-40">
+                                                                 <DropdownMenuItem 
+                                                                     onClick={() => navigate(`/admin/edit-job/${job.id}`)}
+                                                                     className="cursor-pointer text-xs focus:bg-accent focus:text-accent-foreground dark:focus:bg-white/5 dark:focus:text-white py-2 flex items-center gap-2"
+                                                                 >
+                                                                     <Briefcase className="w-3.5 h-3.5 text-muted-foreground dark:text-slate-400" /> 
+                                                                     <span>Edit Job</span>
+                                                                 </DropdownMenuItem>
+                                                                 
+                                                                 <DropdownMenuItem 
+                                                                     onClick={() => handleArchiveToggle(job)}
+                                                                     className={cn(
+                                                                         "cursor-pointer text-xs focus:bg-accent focus:text-accent-foreground dark:focus:bg-white/5 py-2 flex items-center gap-2",
+                                                                         job.status === 'archived' ? "text-emerald-600 dark:text-emerald-400 focus:text-emerald-700 dark:focus:text-emerald-300" : "text-amber-600 dark:text-amber-400 focus:text-amber-700 dark:focus:text-amber-300"
+                                                                     )}
+                                                                 >
+                                                                     {job.status === 'archived' ? (
+                                                                         <>
+                                                                             <RotateCcw className="w-3.5 h-3.5" /> 
+                                                                             <span>Restore</span>
+                                                                         </>
+                                                                     ) : (
+                                                                         <>
+                                                                             <Archive className="w-3.5 h-3.5" /> 
+                                                                             <span>Archive</span>
+                                                                         </>
+                                                                     )}
+                                                                 </DropdownMenuItem>
+                                                                 
+                                                                 <DropdownMenuSeparator className="bg-border dark:bg-white/10" />
+                                                                 
+                                                                 <DropdownMenuItem 
+                                                                     onClick={() => {
+                                                                         setJobToDelete(job.id);
+                                                                         setShowDeleteDialog(true);
+                                                                     }}
+                                                                     className="cursor-pointer text-xs text-rose-400 focus:text-rose-300 focus:bg-rose-500/10 py-2 flex items-center gap-2"
+                                                                 >
+                                                                     <Trash2 className="w-3.5 h-3.5" /> 
+                                                                     <span>Delete</span>
+                                                                 </DropdownMenuItem>
+                                                             </DropdownMenuContent>
+                                                         </DropdownMenu>
+                                                     </div>
+                                                </CardContent>
+                                            </Card>
+                                        );
+                                    })}
+
+                                    {/* Pagination Controls */}
+                                    {totalJobsCount > 0 && (
+                                        <div className="p-4 border border-border/40 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground bg-card/30 mt-4">
+                                            <div>
+                                                Showing <span className="font-semibold text-foreground">{startIndex + 1}</span> to{' '}
+                                                <span className="font-semibold text-foreground">{endIndex}</span> of{' '}
+                                                <span className="font-semibold text-foreground">{totalJobsCount}</span> placement opportunities
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    disabled={safeCurrentPage <= 1}
+                                                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                                    className="h-8 border-border bg-card/50 hover:bg-card text-foreground text-[10px] font-bold px-3 rounded-lg flex items-center"
+                                                >
+                                                    <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Previous
+                                                </Button>
+                                                <div className="flex items-center gap-1 font-mono text-[10px] text-foreground font-bold">
+                                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                                                        <button
+                                                            key={p}
+                                                            onClick={() => setCurrentPage(p)}
+                                                            className={`w-7 h-7 rounded-lg transition-colors ${
+                                                                p === safeCurrentPage
+                                                                    ? 'bg-indigo-600 text-white'
+                                                                    : 'hover:bg-muted text-muted-foreground'
+                                                            }`}
+                                                        >
+                                                            {p}
+                                                        </button>
+                                                    ))}
                                                 </div>
-
-                                                 {/* Moderation Actions on the Right */}
-                                                 <div className="flex items-center gap-2.5 w-full md:w-auto flex-shrink-0 pt-2 md:pt-0 border-t md:border-0 border-border/10 justify-end">
-                                                     {/* 1. View Applicants (Prominent Primary Action) */}
-                                                     <Button
-                                                         variant="default"
-                                                         size="sm"
-                                                         onClick={() => navigate(`/admin/applicants?jobId=${job.id}`)}
-                                                         className="h-9 text-xs px-4 bg-primary hover:bg-primary/95 text-primary-foreground font-bold shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-1.5"
-                                                     >
-                                                         <Users className="w-4 h-4" /> 
-                                                         <span>Applicants</span>
-                                                     </Button>
-                                                     
-                                                     <Button
-                                                         variant="outline"
-                                                         size="sm"
-                                                         onClick={() => navigate(`/jobs/${job.id}`)}
-                                                         className="h-9 text-xs px-3 border-border dark:border-white/10 bg-background dark:bg-slate-950/40 hover:bg-muted dark:hover:bg-white/5 text-foreground hover:text-foreground dark:text-slate-200 dark:hover:text-white font-bold transition-all"
-                                                     >
-                                                         <Eye className="w-4 h-4 mr-1.5 text-muted-foreground dark:text-slate-400 group-hover:text-foreground dark:group-hover:text-slate-100" />
-                                                         <span>View</span>
-                                                     </Button>
-
-                                                     <DropdownMenu>
-                                                         <DropdownMenuTrigger asChild>
-                                                             <Button
-                                                                 variant="outline"
-                                                                 size="icon"
-                                                                 className="h-9 w-9 border-border dark:border-white/10 bg-background dark:bg-slate-950/40 hover:bg-muted dark:hover:bg-white/5 text-muted-foreground hover:text-foreground dark:text-slate-300 dark:hover:text-white rounded-lg transition-all"
-                                                             >
-                                                                 <MoreVertical className="w-4 h-4" />
-                                                             </Button>
-                                                         </DropdownMenuTrigger>
-                                                         <DropdownMenuContent align="end" className="bg-popover border border-border dark:bg-slate-900 dark:border-white/10 text-popover-foreground dark:text-slate-200 w-40">
-                                                             <DropdownMenuItem 
-                                                                 onClick={() => navigate(`/admin/edit-job/${job.id}`)}
-                                                                 className="cursor-pointer text-xs focus:bg-accent focus:text-accent-foreground dark:focus:bg-white/5 dark:focus:text-white py-2 flex items-center gap-2"
-                                                             >
-                                                                 <Briefcase className="w-3.5 h-3.5 text-muted-foreground dark:text-slate-400" /> 
-                                                                 <span>Edit Job</span>
-                                                             </DropdownMenuItem>
-                                                             
-                                                             <DropdownMenuItem 
-                                                                 onClick={() => handleArchiveToggle(job)}
-                                                                 className={cn(
-                                                                     "cursor-pointer text-xs focus:bg-accent focus:text-accent-foreground dark:focus:bg-white/5 py-2 flex items-center gap-2",
-                                                                     job.status === 'archived' ? "text-emerald-600 dark:text-emerald-400 focus:text-emerald-700 dark:focus:text-emerald-300" : "text-amber-600 dark:text-amber-400 focus:text-amber-700 dark:focus:text-amber-300"
-                                                                 )}
-                                                             >
-                                                                 {job.status === 'archived' ? (
-                                                                     <>
-                                                                         <RotateCcw className="w-3.5 h-3.5" /> 
-                                                                         <span>Restore</span>
-                                                                     </>
-                                                                 ) : (
-                                                                     <>
-                                                                         <Archive className="w-3.5 h-3.5" /> 
-                                                                         <span>Archive</span>
-                                                                     </>
-                                                                 )}
-                                                             </DropdownMenuItem>
-                                                             
-                                                             <DropdownMenuSeparator className="bg-border dark:bg-white/10" />
-                                                             
-                                                             <DropdownMenuItem 
-                                                                 onClick={() => {
-                                                                     setJobToDelete(job.id);
-                                                                     setShowDeleteDialog(true);
-                                                                 }}
-                                                                 className="cursor-pointer text-xs text-rose-400 focus:text-rose-300 focus:bg-rose-500/10 py-2 flex items-center gap-2"
-                                                             >
-                                                                 <Trash2 className="w-3.5 h-3.5" /> 
-                                                                 <span>Delete</span>
-                                                             </DropdownMenuItem>
-                                                         </DropdownMenuContent>
-                                                     </DropdownMenu>
-                                                 </div>
-                                            </CardContent>
-                                        </Card>
-                                    );
-                                })}
-                            </div>
-                        )}
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    disabled={safeCurrentPage >= totalPages}
+                                                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                                    className="h-8 border-border bg-card/50 hover:bg-card text-foreground text-[10px] font-bold px-3 rounded-lg flex items-center"
+                                                >
+                                                    Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
                     </div>
 
                     {/* Right side analytics pane (4 cols) */}
@@ -960,15 +1043,25 @@ export default function Jobs() {
                 {/* Filters */}
                 <Card>
                     <CardContent className="p-4">
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            <div className="relative flex-1">
+                        <div className="flex flex-col sm:flex-row gap-3 items-center">
+                            <div className="relative flex-1 w-full">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                 <Input
                                     placeholder="Search company or role..."
-                                    className="pl-10"
+                                    className="pl-10 pr-9"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
                                 />
+                                {search && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSearch('')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5 rounded-full hover:bg-muted/50 transition-colors"
+                                        title="Clear search query"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
                             </div>
                             <Select value={typeFilter} onValueChange={setTypeFilter}>
                                 <SelectTrigger className="w-[180px]">
@@ -980,6 +1073,22 @@ export default function Jobs() {
                                     <SelectItem value="internship">Internship</SelectItem>
                                 </SelectContent>
                             </Select>
+                            {(Boolean(search.trim()) || typeFilter !== 'all' || jobFilter !== 'all') && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                        setSearch('');
+                                        setTypeFilter('all');
+                                        setJobFilter('all');
+                                    }}
+                                    className="h-10 px-3 text-xs font-semibold text-muted-foreground hover:text-foreground border-border/80 hover:bg-card/80 flex items-center gap-1.5 whitespace-nowrap transition-all"
+                                    title="Clear all active filters"
+                                >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                    <span>Clear Filters</span>
+                                </Button>
+                            )}
                         </div>
                     </CardContent>
                 </Card>
@@ -1022,173 +1131,224 @@ export default function Jobs() {
                             <p className="text-sm text-muted-foreground">Try adjusting your filters</p>
                         </CardContent>
                     </Card>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-stagger">
-                        {filteredJobs.map((job) => {
-                            const { eligible, status, reasons } = checkEligibility(job);
-                            const expired = isExpired(job.application_deadline);
-                            return (
-                                <Card
-                                    key={job.id}
-                                    className={cn(
-                                        'card-hover cursor-pointer relative overflow-hidden',
-                                        status === 'ineligible' && 'opacity-80',
-                                        expired && 'opacity-60'
-                                    )}
-                                    onClick={() => navigate(`/jobs/${job.id}`)}
-                                >
-                                    {appliedJobIds.includes(job.id) ? (
-                                        <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] uppercase tracking-wider px-3 py-1 rounded-bl-lg font-bold flex items-center gap-1 shadow-sm">
-                                            <CheckCircle className="w-3.5 h-3.5" /> Applied
-                                        </div>
-                                    ) : expired ? (
-                                        <div className="absolute top-0 right-0 bg-destructive text-destructive-foreground text-[10px] uppercase tracking-wider px-3 py-1 rounded-bl-lg font-bold">
-                                            Closed
-                                        </div>
-                                    ) : null}
-                                    <CardContent className="p-6">
-                                        <div className="flex items-start justify-between mb-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                                                    <Building2 className="w-6 h-6 text-primary" />
+                ) : (() => {
+                    const totalStudentJobsCount = filteredJobs.length;
+                    const studentTotalPages = Math.ceil(totalStudentJobsCount / ITEMS_PER_PAGE) || 1;
+                    const safeStudentCurrentPage = Math.min(currentPage, studentTotalPages) || 1;
+                    const studentStartIndex = (safeStudentCurrentPage - 1) * ITEMS_PER_PAGE;
+                    const studentEndIndex = Math.min(studentStartIndex + ITEMS_PER_PAGE, totalStudentJobsCount);
+                    const paginatedStudentJobs = filteredJobs.slice(studentStartIndex, studentStartIndex + ITEMS_PER_PAGE);
+
+                    return (
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-stagger">
+                                {paginatedStudentJobs.map((job) => {
+                                    const { eligible, status, reasons } = checkEligibility(job);
+                                    const expired = isExpired(job.application_deadline);
+                                    return (
+                                        <Card
+                                            key={job.id}
+                                            className={cn(
+                                                'card-hover cursor-pointer relative overflow-hidden',
+                                                status === 'ineligible' && 'opacity-80',
+                                                expired && 'opacity-60'
+                                            )}
+                                            onClick={() => navigate(`/jobs/${job.id}`)}
+                                        >
+                                            {appliedJobIds.includes(job.id) ? (
+                                                <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] uppercase tracking-wider px-3 py-1 rounded-bl-lg font-bold flex items-center gap-1 shadow-sm">
+                                                    <CheckCircle className="w-3.5 h-3.5" /> Applied
                                                 </div>
-                                                <div>
-                                                    <h3 className="font-heading font-semibold text-lg leading-tight">{job.title}</h3>
-                                                    <p className="text-sm text-muted-foreground">{job.company}</p>
+                                            ) : expired ? (
+                                                <div className="absolute top-0 right-0 bg-destructive text-destructive-foreground text-[10px] uppercase tracking-wider px-3 py-1 rounded-bl-lg font-bold">
+                                                    Closed
                                                 </div>
-                                            </div>
-                                            {role === 'student' && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="flex-shrink-0"
-                                                    onClick={(e) => toggleSave(job.id, e)}
+                                            ) : null}
+                                            <CardContent className="p-6">
+                                                <div className="flex items-start justify-between mb-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                                                            <Building2 className="w-6 h-6 text-primary" />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="font-heading font-semibold text-lg leading-tight">{job.title}</h3>
+                                                            <p className="text-sm text-muted-foreground">{job.company}</p>
+                                                        </div>
+                                                    </div>
+                                                    {role === 'student' && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="flex-shrink-0"
+                                                            onClick={(e) => toggleSave(job.id, e)}
+                                                        >
+                                                            <Bookmark className={cn('w-5 h-5', savedJobs.includes(job.id) && 'fill-primary text-primary')} />
+                                                        </Button>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex flex-wrap gap-2 mb-4">
+                                                    {job.status && job.status !== 'active' && (
+                                                        <Badge variant={job.status === 'draft' ? 'secondary' : 'destructive'} className="uppercase font-bold text-[9px] tracking-wider">
+                                                            {job.status}
+                                                        </Badge>
+                                                    )}
+                                                    <Badge variant={job.job_type === 'internship' ? 'warning' : 'default'}>
+                                                        {job.job_type}
+                                                    </Badge>
+                                                    {job.work_mode && (
+                                                        <Badge variant="secondary">{job.work_mode}</Badge>
+                                                    )}
+                                                    {job.job_documents && job.job_documents.length > 0 && (
+                                                        <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider">
+                                                            <FileText className="w-3 h-3" /> {job.job_documents.length} {job.job_documents.length === 1 ? 'Doc' : 'Docs'} Attached
+                                                        </Badge>
+                                                    )}
+                                                    {job.application_mode === 'external' && (
+                                                        <Badge variant="outline" className="border-violet-500/20 bg-violet-500/5 text-violet-600 dark:text-violet-400 flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider">
+                                                            <Globe className="w-3 h-3" /> External Application Required
+                                                        </Badge>
+                                                    )}
+                                                    {job.application_mode === 'both' && (
+                                                        <Badge variant="outline" className="border-violet-500/20 bg-violet-500/5 text-violet-600 dark:text-violet-400 flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider">
+                                                            <Globe className="w-3 h-3" /> External Option Available
+                                                        </Badge>
+                                                    )}
+                                                    {role === 'student' && (
+                                                        appliedJobIds.includes(job.id) ? (
+                                                            <Badge className="bg-blue-500 hover:bg-blue-600 text-white flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider">
+                                                                <CheckCircle className="w-3 h-3" /> Applied • Under Review
+                                                            </Badge>
+                                                        ) : status === 'eligible' ? (
+                                                            <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider">
+                                                                <CheckCircle className="w-3 h-3" /> Eligible to Apply
+                                                            </Badge>
+                                                        ) : status === 'incomplete' ? (
+                                                            <Badge className="bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider">
+                                                                <AlertCircle className="w-3 h-3" /> Profile Incomplete
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge variant="destructive" className="flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider">
+                                                                <AlertCircle className="w-3 h-3" /> Ineligible
+                                                            </Badge>
+                                                        )
+                                                    )}
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-y-2 text-sm text-muted-foreground">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <IndianRupee className="w-4 h-4" /> 
+                                                        <span>{job.ctc ? `${job.ctc} LPA` : job.stipend ? `₹${job.stipend}/mo` : 'Not specified'}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <MapPin className="w-4 h-4" />
+                                                        <span>{parseArrayDisplay(job.location).join(', ') || 'Not specified'}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Calendar className="w-4 h-4" />
+                                                        <span>Deadline: {job.application_deadline ? new Date(job.application_deadline).toLocaleDateString() : 'Rolling'}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Briefcase className="w-4 h-4" />
+                                                        <span>{job.num_rounds || '—'} rounds</span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="mt-3.5 pt-2.5 border-t border-border/30 text-xs flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+                                                    <div>
+                                                        <span className="font-semibold text-foreground/80">Branches: </span>
+                                                        <span className="font-medium">{parseArrayDisplay(job.allowed_branches).join(', ') || 'All'}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="font-semibold text-foreground/80">Years: </span>
+                                                        <span className="font-medium">{parseArrayDisplay(job.allowed_years).map(y => getYearDisplay(y)).join(', ') || 'All'}</span>
+                                                    </div>
+                                                    {parseFloat(job.min_cgpa) > 0 && (
+                                                        <div>
+                                                            <span className="font-semibold text-foreground/80">Min CGPA: </span>
+                                                            <span className="font-medium">{job.min_cgpa}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {role === 'student' && status === 'ineligible' && reasons.length > 0 && (
+                                                    <div className="mt-3 p-2 bg-destructive/5 rounded-md">
+                                                        <p className="text-xs text-destructive font-medium mb-1">Not Eligible:</p>
+                                                        {reasons.map((r, i) => (
+                                                            <p key={i} className="text-xs text-destructive/80">• {r}</p>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {role === 'student' && status === 'incomplete' && (
+                                                    <div className="mt-3 p-2.5 bg-amber-500/5 rounded-md border border-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+                                                        <span className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold">
+                                                            Complete your profile to check eligibility.
+                                                        </span>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="h-7 text-[10px] font-bold px-2.5 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 shrink-0"
+                                                            onClick={() => navigate('/profile')}
+                                                        >
+                                                            Complete Profile
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </CardContent>
+                                        </Card>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Pagination Controls */}
+                            {totalStudentJobsCount > 0 && (
+                                <div className="p-4 border border-border/40 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground bg-card/30 mt-4">
+                                    <div>
+                                        Showing <span className="font-semibold text-foreground">{studentStartIndex + 1}</span> to{' '}
+                                        <span className="font-semibold text-foreground">{studentEndIndex}</span> of{' '}
+                                        <span className="font-semibold text-foreground">{totalStudentJobsCount}</span> placement opportunities
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={safeStudentCurrentPage <= 1}
+                                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                            className="h-8 border-border bg-card/50 hover:bg-card text-foreground text-[10px] font-bold px-3 rounded-lg flex items-center"
+                                        >
+                                            <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Previous
+                                        </Button>
+                                        <div className="flex items-center gap-1 font-mono text-[10px] text-foreground font-bold">
+                                            {Array.from({ length: studentTotalPages }, (_, i) => i + 1).map((p) => (
+                                                <button
+                                                    key={p}
+                                                    onClick={() => setCurrentPage(p)}
+                                                    className={`w-7 h-7 rounded-lg transition-colors ${
+                                                        p === safeStudentCurrentPage
+                                                            ? 'bg-indigo-600 text-white'
+                                                            : 'hover:bg-muted text-muted-foreground'
+                                                    }`}
                                                 >
-                                                    <Bookmark className={cn('w-5 h-5', savedJobs.includes(job.id) && 'fill-primary text-primary')} />
-                                                </Button>
-                                            )}
+                                                    {p}
+                                                </button>
+                                            ))}
                                         </div>
-
-                                        <div className="flex flex-wrap gap-2 mb-4">
-                                            {job.status && job.status !== 'active' && (
-                                                <Badge variant={job.status === 'draft' ? 'secondary' : 'destructive'} className="uppercase font-bold text-[9px] tracking-wider">
-                                                    {job.status}
-                                                </Badge>
-                                            )}
-                                            <Badge variant={job.job_type === 'internship' ? 'warning' : 'default'}>
-                                                {job.job_type}
-                                            </Badge>
-                                            {job.work_mode && (
-                                                <Badge variant="secondary">{job.work_mode}</Badge>
-                                            )}
-                                            {job.job_documents && job.job_documents.length > 0 && (
-                                                <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider">
-                                                    <FileText className="w-3 h-3" /> {job.job_documents.length} {job.job_documents.length === 1 ? 'Doc' : 'Docs'} Attached
-                                                </Badge>
-                                            )}
-                                            {job.application_mode === 'external' && (
-                                                <Badge variant="outline" className="border-violet-500/20 bg-violet-500/5 text-violet-600 dark:text-violet-400 flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider">
-                                                    <Globe className="w-3 h-3" /> External Application Required
-                                                </Badge>
-                                            )}
-                                            {job.application_mode === 'both' && (
-                                                <Badge variant="outline" className="border-violet-500/20 bg-violet-500/5 text-violet-600 dark:text-violet-400 flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider">
-                                                    <Globe className="w-3 h-3" /> External Option Available
-                                                </Badge>
-                                            )}
-                                            {role === 'student' && (
-                                                appliedJobIds.includes(job.id) ? (
-                                                    <Badge className="bg-blue-500 hover:bg-blue-600 text-white flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider">
-                                                        <CheckCircle className="w-3 h-3" /> Applied • Under Review
-                                                    </Badge>
-                                                ) : status === 'eligible' ? (
-                                                    <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider">
-                                                        <CheckCircle className="w-3 h-3" /> Eligible to Apply
-                                                    </Badge>
-                                                ) : status === 'incomplete' ? (
-                                                    <Badge className="bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider">
-                                                        <AlertCircle className="w-3 h-3" /> Profile Incomplete
-                                                    </Badge>
-                                                ) : (
-                                                    <Badge variant="destructive" className="flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider">
-                                                        <AlertCircle className="w-3 h-3" /> Ineligible
-                                                    </Badge>
-                                                )
-                                            )}
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-y-2 text-sm text-muted-foreground">
-                                            <div className="flex items-center gap-1.5">
-                                                <IndianRupee className="w-4 h-4" /> 
-                                                <span>{job.ctc ? `${job.ctc} LPA` : job.stipend ? `₹${job.stipend}/mo` : 'Not specified'}</span>
-                                            </div>
-                                            <div className="flex items-center gap-1.5">
-                                                <MapPin className="w-4 h-4" />
-                                                <span>{parseArrayDisplay(job.location).join(', ') || 'Not specified'}</span>
-                                            </div>
-                                            <div className="flex items-center gap-1.5">
-                                                <Calendar className="w-4 h-4" />
-                                                <span>Deadline: {job.application_deadline ? new Date(job.application_deadline).toLocaleDateString() : 'Rolling'}</span>
-                                            </div>
-                                            <div className="flex items-center gap-1.5">
-                                                <Briefcase className="w-4 h-4" />
-                                                <span>{job.num_rounds || '—'} rounds</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="mt-3.5 pt-2.5 border-t border-border/30 text-xs flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
-                                            <div>
-                                                <span className="font-semibold text-foreground/80">Branches: </span>
-                                                <span className="font-medium">{parseArrayDisplay(job.allowed_branches).join(', ') || 'All'}</span>
-                                            </div>
-                                            <div>
-                                                <span className="font-semibold text-foreground/80">Years: </span>
-                                                <span className="font-medium">{parseArrayDisplay(job.allowed_years).map(y => getYearDisplay(y)).join(', ') || 'All'}</span>
-                                            </div>
-                                            {job.allowed_graduation_years && parseArrayDisplay(job.allowed_graduation_years).length > 0 && (
-                                                <div>
-                                                    <span className="font-semibold text-foreground/80">Grad Years: </span>
-                                                    <span className="font-medium">{parseArrayDisplay(job.allowed_graduation_years).join(', ')}</span>
-                                                </div>
-                                            )}
-                                            {parseFloat(job.min_cgpa) > 0 && (
-                                                <div>
-                                                    <span className="font-semibold text-foreground/80">Min CGPA: </span>
-                                                    <span className="font-medium">{job.min_cgpa}</span>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {role === 'student' && status === 'ineligible' && reasons.length > 0 && (
-                                            <div className="mt-3 p-2 bg-destructive/5 rounded-md">
-                                                <p className="text-xs text-destructive font-medium mb-1">Not Eligible:</p>
-                                                {reasons.map((r, i) => (
-                                                    <p key={i} className="text-xs text-destructive/80">• {r}</p>
-                                                ))}
-                                            </div>
-                                        )}
-
-                                        {role === 'student' && status === 'incomplete' && (
-                                            <div className="mt-3 p-2.5 bg-amber-500/5 rounded-md border border-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
-                                                <span className="text-[11px] text-amber-700 dark:text-amber-400 font-semibold">
-                                                    Complete your profile to check eligibility.
-                                                </span>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    className="h-7 text-[10px] font-bold px-2.5 border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 shrink-0"
-                                                    onClick={() => navigate('/profile')}
-                                                >
-                                                    Complete Profile
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            );
-                        })}
-                    </div>
-                )}
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={safeStudentCurrentPage >= studentTotalPages}
+                                            onClick={() => setCurrentPage(prev => Math.min(studentTotalPages, prev + 1))}
+                                            className="h-8 border-border bg-card/50 hover:bg-card text-foreground text-[10px] font-bold px-3 rounded-lg flex items-center"
+                                        >
+                                            Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
             </div>
         );
     };

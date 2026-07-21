@@ -728,6 +728,17 @@ export default function PostJob() {
         if (form.company.trim().length < 2) {
             errors.company = "Company Name must be at least 2 characters.";
         }
+        if (form.logo_url && form.logo_url.trim() !== '') {
+            const val = form.logo_url.trim();
+            try {
+                const parsed = new URL(val);
+                if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+                    errors.logo_url = "Logo URL must start with http:// or https://";
+                }
+            } catch {
+                errors.logo_url = "Please enter a valid URL starting with http:// or https://";
+            }
+        }
         if (form.role.trim().length < 2) {
             errors.role = "Role / Position name must be at least 2 characters.";
         }
@@ -761,9 +772,6 @@ export default function PostJob() {
         }
         if (form.allowed_years.length === 0) {
             errors.allowed_years = "At least one allowed year must be selected.";
-        }
-        if (!form.allowed_graduation_years || form.allowed_graduation_years.length === 0) {
-            errors.allowed_graduation_years = "At least one graduation year must be selected.";
         }
         if (form.location.length === 0) {
             errors.location = "At least one city/location is required.";
@@ -802,6 +810,38 @@ export default function PostJob() {
 
 
     const isFormValid = Object.keys(validationErrors).length === 0;
+
+    const isStepValid = useMemo(() => {
+        switch (step) {
+            case 1:
+                return !validationErrors.company && !validationErrors.logo_url;
+            case 2:
+                return !validationErrors.role && 
+                       !validationErrors.description && 
+                       !validationErrors.ctc && 
+                       !validationErrors.stipend && 
+                       !validationErrors.compensation && 
+                       !validationErrors.location;
+            case 3:
+                return !validationErrors.allowed_branches && 
+                       !validationErrors.allowed_years && 
+                       !validationErrors.min_cgpa && 
+                       !validationErrors.max_backlogs &&
+                       !validationErrors.application_deadline;
+            case 4:
+                return !validationErrors.selection_rounds && 
+                       !validationErrors.selection_rounds_items;
+            case 5:
+                return !validationErrors.required_skills && 
+                       !validationErrors.tech_stack;
+            case 6:
+                return true;
+            case 7:
+                return isFormValid && publishVerified;
+            default:
+                return true;
+        }
+    }, [step, validationErrors, isFormValid, publishVerified]);
 
     // Database Pub/Sub trigger submit
     const handleSubmit = async (publishStatus: 'active' | 'draft') => {
@@ -1074,7 +1114,6 @@ export default function PostJob() {
                                     <div className="space-y-1 text-sm">
                                         <p><span className="text-muted-foreground">Branches:</span> <span className="font-medium text-foreground">{form.allowed_branches.join(', ') || 'None selected'}</span></p>
                                         <p><span className="text-muted-foreground">Allowed Years:</span> <span className="font-medium text-foreground">{form.allowed_years.map(y => getYearDisplay(y)).join(', ') || 'None selected'}</span></p>
-                                        <p><span className="text-muted-foreground">Graduation Years:</span> <span className="font-medium text-foreground">{(form.allowed_graduation_years || []).join(', ') || 'None selected'}</span></p>
                                     </div>
                                 </div>
                                 <div>
@@ -1122,21 +1161,30 @@ export default function PostJob() {
                                 { stepNum: 5, label: 'Skills', icon: Sparkles },
                                 { stepNum: 6, label: 'Documents', icon: FileText },
                                 { stepNum: 7, label: 'Publish', icon: CheckCircle }
-                            ].map((item) => (
-                                <button
-                                    key={item.stepNum}
-                                    onClick={() => setStep(item.stepNum)}
-                                    className={cn(
-                                        'flex flex-col md:flex-row items-center justify-center gap-2 p-2 rounded-xl text-xs font-bold transition-all duration-200 shrink-0 min-w-[70px]',
-                                        step === item.stepNum 
-                                            ? 'bg-primary text-white shadow-md' 
-                                            : 'text-muted-foreground hover:bg-muted/40'
-                                    )}
-                                >
-                                    <item.icon className="w-4 h-4" />
-                                    <span className="hidden sm:inline">{item.label}</span>
-                                </button>
-                            ))}
+                            ].map((item) => {
+                                const isFutureStepDisabled = item.stepNum > step && !isStepValid;
+                                return (
+                                    <button
+                                        key={item.stepNum}
+                                        onClick={() => {
+                                            if (isFutureStepDisabled) return;
+                                            setStep(item.stepNum);
+                                        }}
+                                        disabled={isFutureStepDisabled}
+                                        className={cn(
+                                            'flex flex-col md:flex-row items-center justify-center gap-2 p-2 rounded-xl text-xs font-bold transition-all duration-200 shrink-0 min-w-[70px]',
+                                            step === item.stepNum 
+                                                ? 'bg-primary text-white shadow-md' 
+                                                : isFutureStepDisabled
+                                                    ? 'opacity-50 cursor-not-allowed text-muted-foreground'
+                                                    : 'text-muted-foreground hover:bg-muted/40'
+                                        )}
+                                    >
+                                        <item.icon className="w-4 h-4" />
+                                        <span className="hidden sm:inline">{item.label}</span>
+                                    </button>
+                                );
+                            })}
                         </div>
 
                         {/* Step 1: Company Info */}
@@ -1182,9 +1230,12 @@ export default function PostJob() {
                                             value={form.logo_url}
                                             onChange={(e) => updateForm('logo_url', e.target.value)}
                                             placeholder="https://..."
-                                            className="mt-1"
+                                            className={cn("mt-1", validationErrors.logo_url && "border-red-500 focus-visible:ring-red-500")}
                                         />
-                                        {form.logo_url && (
+                                        {validationErrors.logo_url && (
+                                            <p className="text-xs text-red-500 mt-1 font-semibold">{validationErrors.logo_url}</p>
+                                        )}
+                                        {form.logo_url && !validationErrors.logo_url && (
                                             <div className="mt-3 flex items-center gap-2 border p-2 rounded-xl max-w-xs bg-muted/30">
                                                 <img src={form.logo_url} alt="logo preview" className="w-8 h-8 rounded object-contain bg-white" />
                                                 <span className="text-xs font-semibold text-muted-foreground truncate">Logo Preview</span>
@@ -1610,152 +1661,60 @@ export default function PostJob() {
                                         </div>
                                     </div>
 
-                                    {/* Section 3: Cohorts Grid */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        
-                                        {/* Column 1: Academic Years */}
-                                        <div className="border border-border/80 bg-card rounded-2xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
-                                            <div className="space-y-3">
-                                                <div className="flex justify-between items-start">
-                                                    <div>
-                                                        <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                                                            Allowed Years *
-                                                        </h3>
-                                                        <p className="text-xs text-muted-foreground font-semibold mt-0.5">Filter based on student current academic year</p>
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 text-[10px]">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => updateForm('allowed_years', [...YEAR_OPTIONS])}
-                                                            className="text-primary hover:underline font-bold"
-                                                        >
-                                                            Select All
-                                                        </button>
-                                                        <span className="text-muted-foreground/30">|</span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => updateForm('allowed_years', [])}
-                                                            className="text-muted-foreground hover:text-foreground hover:underline font-bold"
-                                                        >
-                                                            Clear
-                                                        </button>
-                                                    </div>
+                                    {/* Section 3: Allowed Years */}
+                                    <div className="border border-border/80 bg-card rounded-2xl p-5 shadow-sm space-y-4">
+                                        <div className="space-y-3">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                                                        Allowed Years *
+                                                    </h3>
+                                                    <p className="text-xs text-muted-foreground font-semibold mt-0.5">Filter based on student current academic year</p>
                                                 </div>
-                                                {validationErrors.allowed_years && <p className="text-xs text-red-500 font-semibold">{validationErrors.allowed_years}</p>}
-                                                
-                                                <div className="grid grid-cols-2 gap-2.5 pt-1">
-                                                    {YEAR_OPTIONS.map((year) => {
-                                                        const selected = form.allowed_years.includes(year);
-                                                        return (
-                                                            <button
-                                                                key={year}
-                                                                type="button"
-                                                                onClick={() => toggleYear(year)}
-                                                                className={cn(
-                                                                    'py-3 px-4 rounded-xl text-xs font-bold border transition-all duration-200 flex items-center justify-between select-none',
-                                                                    selected 
-                                                                        ? 'bg-primary/10 border-primary text-primary shadow-sm' 
-                                                                        : 'bg-background text-muted-foreground border-border/85 hover:border-primary/40'
-                                                                )}
-                                                            >
-                                                                <span>{getYearDisplay(year)}</span>
-                                                                {selected ? (
-                                                                    <CheckCircle className="w-4 h-4 text-primary shrink-0" />
-                                                                ) : (
-                                                                    <div className="w-4 h-4 rounded-full border border-muted-foreground/30 shrink-0" />
-                                                                )}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Column 2: Graduation Years */}
-                                        <div className="border border-border/80 bg-card rounded-2xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
-                                            <div className="space-y-3">
-                                                <div className="flex justify-between items-start">
-                                                    <div>
-                                                        <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                                                            Graduation Years *
-                                                        </h3>
-                                                        <p className="text-xs text-muted-foreground font-semibold mt-0.5">Filter based on target graduation batch</p>
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 text-[10px]">
-                                                        <button
-                                                            type="button"
-                                                            onClick={selectAllFilteredGradYears}
-                                                            className="text-primary hover:underline font-bold"
-                                                        >
-                                                            Select All
-                                                        </button>
-                                                        <span className="text-muted-foreground/30">|</span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={clearAllFilteredGradYears}
-                                                            className="text-muted-foreground hover:text-foreground hover:underline font-bold"
-                                                        >
-                                                            Clear
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                {validationErrors.allowed_graduation_years && <p className="text-xs text-red-500 font-semibold">{validationErrors.allowed_graduation_years}</p>}
-                                                
-                                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 max-h-[160px] overflow-y-auto pr-1">
-                                                    {filteredGradYears.map((year) => {
-                                                        const selected = (form.allowed_graduation_years || []).includes(year);
-                                                        return (
-                                                            <button
-                                                                key={year}
-                                                                type="button"
-                                                                onClick={() => toggleGraduationYear(year)}
-                                                                className={cn(
-                                                                    'py-2 px-3 rounded-xl text-xs font-bold border transition-all duration-200 flex items-center justify-between select-none',
-                                                                    selected 
-                                                                        ? 'bg-primary/10 border-primary text-primary shadow-sm' 
-                                                                        : 'bg-background text-muted-foreground border-border/85 hover:border-primary/40'
-                                                                )}
-                                                            >
-                                                                <span>{year}</span>
-                                                                {selected ? (
-                                                                    <CheckCircle className="w-3.5 h-3.5 text-primary shrink-0" />
-                                                                ) : (
-                                                                    <div className="w-3.5 h-3.5 rounded-full border border-muted-foreground/30 shrink-0" />
-                                                                )}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-
-                                            {/* Custom Grad Year Inline Add */}
-                                            <div className="flex gap-2 pt-3 border-t border-border/30">
-                                                <div className="relative flex-1">
-                                                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                                                    <Input
-                                                        type="text"
-                                                        placeholder="Search / Add year..."
-                                                        value={gradYearSearch}
-                                                        onChange={(e) => setGradYearSearch(e.target.value)}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter') {
-                                                                e.preventDefault();
-                                                                handleAddCustomGradYear();
-                                                            }
-                                                        }}
-                                                        className="pl-8 h-9 text-xs bg-background border-input text-foreground rounded-xl"
-                                                    />
-                                                </div>
-                                                {gradYearSearch.trim() && (
-                                                    <Button
+                                                <div className="flex items-center gap-1.5 text-[10px]">
+                                                    <button
                                                         type="button"
-                                                        onClick={() => handleAddCustomGradYear()}
-                                                        size="sm"
-                                                        className="h-9 px-3 text-xs bg-primary text-white rounded-xl font-bold flex items-center gap-1 shrink-0"
+                                                        onClick={() => updateForm('allowed_years', [...YEAR_OPTIONS])}
+                                                        className="text-primary hover:underline font-bold"
                                                     >
-                                                        <Plus className="w-3.5 h-3.5" /> Add
-                                                    </Button>
-                                                )}
+                                                        Select All
+                                                    </button>
+                                                    <span className="text-muted-foreground/30">|</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => updateForm('allowed_years', [])}
+                                                        className="text-muted-foreground hover:text-foreground hover:underline font-bold"
+                                                    >
+                                                        Clear
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {validationErrors.allowed_years && <p className="text-xs text-red-500 font-semibold">{validationErrors.allowed_years}</p>}
+                                            
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                                                {YEAR_OPTIONS.map((year) => {
+                                                    const selected = form.allowed_years.includes(year);
+                                                    return (
+                                                        <button
+                                                            key={year}
+                                                            type="button"
+                                                            onClick={() => toggleYear(year)}
+                                                            className={cn(
+                                                                'py-3 px-4 rounded-xl text-xs font-bold border transition-all duration-200 flex items-center justify-between select-none',
+                                                                selected 
+                                                                    ? 'bg-primary/10 border-primary text-primary shadow-sm' 
+                                                                    : 'bg-background text-muted-foreground border-border/85 hover:border-primary/40'
+                                                            )}
+                                                        >
+                                                            <span>{getYearDisplay(year)}</span>
+                                                            {selected ? (
+                                                                <CheckCircle className="w-4 h-4 text-primary shrink-0" />
+                                                            ) : (
+                                                                <div className="w-4 h-4 rounded-full border border-muted-foreground/30 shrink-0" />
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     </div>
@@ -2279,7 +2238,7 @@ export default function PostJob() {
                             {step < 7 ? (
                                 <Button 
                                     onClick={() => setStep(step + 1)} 
-                                    disabled={submitting}
+                                    disabled={submitting || !isStepValid}
                                     className="font-bold flex items-center gap-1.5"
                                 >
                                     Next <ArrowRight className="w-4 h-4" />

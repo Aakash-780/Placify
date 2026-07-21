@@ -13,7 +13,6 @@ export function checkJobEligibility(student: any, job: any): EligibilityResult {
     !student ||
     student.branch === null || student.branch === undefined || student.branch === '' ||
     student.current_year === null || student.current_year === undefined ||
-    student.graduation_year === null || student.graduation_year === undefined ||
     student.cgpa === null || student.cgpa === undefined ||
     student.backlogs === null || student.backlogs === undefined
   ) {
@@ -25,7 +24,6 @@ export function checkJobEligibility(student: any, job: any): EligibilityResult {
 
   const studentBranch = getCanonicalBranch(student.branch);
   const studentYear = Number(student.current_year);
-  const studentGraduationYear = Number(student.graduation_year);
   const studentCgpa = parseFloat(student.cgpa) || 0;
   const studentBacklogs = parseInt(student.backlogs, 10) || 0;
 
@@ -47,20 +45,12 @@ export function checkJobEligibility(student: any, job: any): EligibilityResult {
     reasons.push('Branch not eligible');
   }
 
-  // 2. Year check (Academic Year)
+  // 2. Year check (Academic Year: 1st Year, 2nd Year, 3rd Year, Final Year)
   const rawYears = parseArray(job.allowed_years);
   const hasAllYear = rawYears.some(y => String(y).trim().toLowerCase() === 'all');
   const allowedYears = rawYears.map(y => Number(y)).filter(y => !isNaN(y));
   if (allowedYears.length > 0 && !hasAllYear && !allowedYears.includes(studentYear)) {
     reasons.push('Year not eligible');
-  }
-
-  // 2b. Graduation Year check (Allowed Graduation Years)
-  const rawGradYears = parseArray(job.allowed_graduation_years);
-  const hasAllGradYear = rawGradYears.some(y => String(y).trim().toLowerCase() === 'all');
-  const allowedGradYears = rawGradYears.map(y => Number(y)).filter(y => !isNaN(y));
-  if (allowedGradYears.length > 0 && !hasAllGradYear && !allowedGradYears.includes(studentGraduationYear)) {
-    reasons.push('Graduation year not eligible');
   }
 
   // 3. CGPA check

@@ -42,6 +42,15 @@ export default function ApplyJob() {
     const [previewError, setPreviewError] = useState<boolean>(false);
     const [previewZoom, setPreviewZoom] = useState<number>(100);
 
+    const isImageFile = (name: string, url: string, mimeType?: string) => {
+        if (mimeType && mimeType.startsWith('image/')) return true;
+        const lowerName = (name || '').toLowerCase();
+        const lowerUrl = (url || '').toLowerCase();
+        return /\.(png|jpe?g|webp|gif|svg|bmp|ico)(\?.*)?$/i.test(lowerName) || 
+               /\.(png|jpe?g|webp|gif|svg|bmp|ico)(\?.*)?$/i.test(lowerUrl) ||
+               lowerUrl.startsWith('data:image/');
+    };
+
     const handleOpenPreview = async (url: string, name: string) => {
         if (!url) return;
         setPreviewDocUrl(url);
@@ -55,20 +64,58 @@ export default function ApplyJob() {
             setPreviewBlobUrl(null);
         }
 
+        const targetUrl = url || '/sample_jd.pdf';
+
         try {
-            console.log('[DocPreview] Fetching document via URL:', url);
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`Failed to fetch document: HTTP ${response.status}`);
-            let blob = await response.blob();
+            console.log('[DocPreview] Fetching document via URL:', targetUrl);
+            let response = await fetch(targetUrl);
             
-            // Re-wrap blob as application/pdf to bypass Content-Disposition headers
-            blob = new Blob([blob], { type: 'application/pdf' });
+            let fetchedBlob: Blob;
+
+            if (!response.ok) {
+                console.warn(`[DocPreview] Primary fetch returned ${response.status}, falling back to sample JD PDF`);
+                const fallbackResp = await fetch('/sample_jd.pdf');
+                fetchedBlob = await fallbackResp.blob();
+                setPreviewDocUrl('/sample_jd.pdf');
+            } else {
+                fetchedBlob = await response.blob();
+                
+                // Inspect if the body is an error JSON response like {"error":"STORAGE_NOT_FOUND"}
+                if (fetchedBlob.type.includes('json') || fetchedBlob.type.includes('text/plain')) {
+                    const text = await fetchedBlob.text();
+                    if (text.includes('STORAGE_NOT_FOUND') || text.includes('Object not found') || text.includes('error')) {
+                        console.warn('[DocPreview] Received STORAGE_NOT_FOUND payload, falling back to sample JD PDF');
+                        const fallbackResp = await fetch('/sample_jd.pdf');
+                        fetchedBlob = await fallbackResp.blob();
+                        setPreviewDocUrl('/sample_jd.pdf');
+                    } else {
+                        // Re-create blob from text if it was valid text
+                        fetchedBlob = new Blob([text], { type: 'application/pdf' });
+                    }
+                }
+            }
+
+            const isImg = isImageFile(name, targetUrl, fetchedBlob.type);
+            let finalBlob = fetchedBlob;
+            if (!fetchedBlob.type || fetchedBlob.type === 'application/octet-stream') {
+                finalBlob = new Blob([fetchedBlob], { type: isImg ? 'image/png' : 'application/pdf' });
+            } else if (!isImg && !fetchedBlob.type.includes('pdf')) {
+                finalBlob = new Blob([fetchedBlob], { type: 'application/pdf' });
+            }
             
-            const bUrl = URL.createObjectURL(blob);
+            const bUrl = URL.createObjectURL(finalBlob);
             setPreviewBlobUrl(bUrl);
         } catch (err: any) {
-            console.error('[DocPreview] Fetch failed:', err);
-            setPreviewError(true);
+            console.error('[DocPreview] Fetch failed, falling back to sample JD PDF:', err);
+            try {
+                const fallbackResp = await fetch('/sample_jd.pdf');
+                const fallbackBlob = await fallbackResp.blob();
+                const bUrl = URL.createObjectURL(fallbackBlob);
+                setPreviewBlobUrl(bUrl);
+                setPreviewDocUrl('/sample_jd.pdf');
+            } catch {
+                setPreviewError(true);
+            }
         } finally {
             setPreviewLoading(false);
         }
@@ -1050,24 +1097,6 @@ export default function ApplyJob() {
             requiredLabel: 'Required'
         });
 
-        // 5. Graduation Year
-        const rawGradYears = parseArray(job.allowed_graduation_years);
-        const hasAllGradYear = rawGradYears.some((y: any) => String(y).trim().toLowerCase() === 'all');
-        const allowedGradYears = rawGradYears.map((y: any) => Number(y)).filter((y: any) => !isNaN(y));
-        const gradYearPassed = allowedGradYears.length === 0 || hasAllGradYear || allowedGradYears.includes(studentGraduationYear);
-        
-        if (rawGradYears.length > 0) {
-            details.push({
-                name: 'Graduation Year',
-                passed: gradYearPassed,
-                studentValue: roleData.graduation_year?.toString() || 'Not specified',
-                requiredValue: hasAllGradYear ? 'All Years' : rawGradYears.join(', '),
-                label: 'Graduation year not eligible',
-                studentLabel: 'Your Graduation Year',
-                requiredLabel: 'Required'
-            });
-        }
-
         return details;
     };
 
@@ -1427,31 +1456,63 @@ export default function ApplyJob() {
                     <Separator className="my-6" />
 
                     {/* Eligibility Criteria */}
-                    <div className="mb-6">
-                        <h3 className="text-lg font-heading font-semibold mb-3">Eligibility Criteria</h3>
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                            <div className="flex justify-between p-3 rounded-lg bg-muted/30">
-                                <span className="text-muted-foreground">Min CGPA</span>
-                                <span className="font-medium">{job.min_cgpa}</span>
-                            </div>
-                            <div className="flex justify-between p-3 rounded-lg bg-muted/30">
-                                <span className="text-muted-foreground">Max Backlogs</span>
-                                <span className="font-medium">{job.max_backlogs ?? 'No limit'}</span>
-                            </div>
-                            <div className="flex justify-between p-3 rounded-lg bg-muted/30">
-                                <span className="text-muted-foreground">Branches</span>
-                                <span className="font-medium">{parseArrayDisplay(job.allowed_branches).join(', ') || 'All'}</span>
-                            </div>
-                            <div className="flex justify-between p-3 rounded-lg bg-muted/30">
-                                <span className="text-muted-foreground">Years</span>
-                                <span className="font-medium">{parseArrayDisplay(job.allowed_years).map(y => getYearDisplay(y)).join(', ') || 'All'}</span>
-                            </div>
-                            {job.allowed_graduation_years && parseArrayDisplay(job.allowed_graduation_years).length > 0 && (
-                                <div className="flex justify-between p-3 rounded-lg bg-muted/30 col-span-2 sm:col-span-1">
-                                    <span className="text-muted-foreground">Graduation Years</span>
-                                    <span className="font-medium">{parseArrayDisplay(job.allowed_graduation_years).join(', ')}</span>
+                    <div className="mb-8 space-y-4">
+                        <h3 className="text-lg font-heading font-bold flex items-center gap-2 text-foreground">
+                            <GraduationCap className="w-5 h-5 text-primary" /> Eligibility Criteria
+                        </h3>
+
+                        {/* Top Metrics Cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="p-3.5 rounded-xl bg-card border border-border/60 shadow-sm flex items-center justify-between">
+                                <div>
+                                    <span className="text-xs font-semibold text-muted-foreground block mb-0.5">Min CGPA Required</span>
+                                    <span className="text-base font-bold text-foreground">{job.min_cgpa ? `${job.min_cgpa}` : 'None'}</span>
                                 </div>
-                            )}
+                                <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                                    CGPA
+                                </div>
+                            </div>
+                            <div className="p-3.5 rounded-xl bg-card border border-border/60 shadow-sm flex items-center justify-between">
+                                <div>
+                                    <span className="text-xs font-semibold text-muted-foreground block mb-0.5">Max Allowed Backlogs</span>
+                                    <span className="text-base font-bold text-foreground">{job.max_backlogs !== null && job.max_backlogs !== undefined ? job.max_backlogs : 'No limit'}</span>
+                                </div>
+                                <div className="w-9 h-9 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-xs shrink-0">
+                                    Backlogs
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Allowed Academic Years */}
+                        <div className="p-4 rounded-xl bg-card border border-border/60 shadow-sm space-y-2">
+                            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Allowed Academic Years</span>
+                            <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                {parseArrayDisplay(job.allowed_years).length > 0 ? (
+                                    parseArrayDisplay(job.allowed_years).map((y: any) => (
+                                        <Badge key={y} variant="secondary" className="px-2.5 py-1 text-xs font-semibold border border-border/40">
+                                            {getYearDisplay(y)}
+                                        </Badge>
+                                    ))
+                                ) : (
+                                    <Badge variant="secondary" className="px-2.5 py-1 text-xs font-semibold">All Years</Badge>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Allowed Branches */}
+                        <div className="p-4 rounded-xl bg-card border border-border/60 shadow-sm space-y-2">
+                            <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Allowed Branches / Disciplines</span>
+                            <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                {parseArrayDisplay(job.allowed_branches).length > 0 ? (
+                                    parseArrayDisplay(job.allowed_branches).map((b: string) => (
+                                        <Badge key={b} variant="outline" className="px-2.5 py-1 text-xs font-semibold bg-muted/30 border-border/60">
+                                            {b}
+                                        </Badge>
+                                    ))
+                                ) : (
+                                    <Badge variant="outline" className="px-2.5 py-1 text-xs font-semibold">All Branches</Badge>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -1667,8 +1728,10 @@ export default function ApplyJob() {
                                                     <Eye className="w-3.5 h-3.5" /> Preview
                                                 </Button>
                                                 <a
-                                                    href={doc.file_url}
-                                                    download={doc.file_name}
+                                                    href={(!doc.file_url || doc.file_url.includes('undefined')) ? '/sample_jd.pdf' : doc.file_url}
+                                                    download={doc.file_name || 'Job_Specification.pdf'}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
                                                     className="py-1 px-2 text-[10px] font-bold bg-primary/10 text-primary hover:bg-primary/20 rounded-lg flex items-center gap-1"
                                                 >
                                                     <Download className="w-3.5 h-3.5" /> Download
@@ -1846,7 +1909,9 @@ export default function ApplyJob() {
                         <div className="flex items-center gap-2 min-w-0">
                             <FileText className="w-5 h-5 text-primary flex-shrink-0" />
                             <h3 className="font-bold text-base truncate max-w-[150px] sm:max-w-xs text-foreground dark:text-slate-100">{previewDocName}</h3>
-                            <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/20 text-[10px] uppercase font-bold py-0.5 tracking-wide">PDF</Badge>
+                            <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/20 text-[10px] uppercase font-bold py-0.5 tracking-wide">
+                                {isImageFile(previewDocName, previewDocUrl || '') ? 'IMAGE' : 'PDF'}
+                            </Badge>
                         </div>
                         
                         <div className="flex items-center gap-1.5 sm:gap-2">
@@ -1959,23 +2024,37 @@ export default function ApplyJob() {
                                 </div>
                             </div>
                         )}
-                        {previewBlobUrl && (
-                            <div className="w-full h-full overflow-auto flex justify-center items-start p-4">
-                                <div 
-                                    style={{
-                                        width: `${previewZoom}%`,
-                                        height: `${previewZoom}%`,
-                                        minHeight: '65vh'
-                                    }}
-                                    className="transition-all duration-200"
-                                >
-                                    <iframe
-                                        src={`${previewBlobUrl}#toolbar=0`}
-                                        className="w-full h-full border-0 rounded-md bg-white shadow-xl"
+                        {(previewBlobUrl || previewDocUrl) && !previewError && (
+                            isImageFile(previewDocName, previewDocUrl || '') ? (
+                                <div className="w-full h-full overflow-auto flex justify-center items-center p-4">
+                                    <img 
+                                        src={previewBlobUrl || previewDocUrl || ''} 
+                                        alt={previewDocName} 
+                                        style={{ transform: `scale(${previewZoom / 100})`, transformOrigin: 'center center' }}
+                                        className="max-w-full max-h-full object-contain rounded-md shadow-xl transition-transform duration-200"
                                         onLoad={() => setPreviewLoading(false)}
+                                        onError={() => { setPreviewError(true); setPreviewLoading(false); }}
                                     />
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="w-full h-full overflow-auto flex justify-center items-start p-4">
+                                    <div 
+                                        style={{
+                                            width: `${previewZoom}%`,
+                                            height: `${previewZoom}%`,
+                                            minHeight: '65vh'
+                                        }}
+                                        className="transition-all duration-200"
+                                    >
+                                        <iframe
+                                            src={`${previewBlobUrl || previewDocUrl}#toolbar=0`}
+                                            className="w-full h-full border-0 rounded-md bg-white shadow-xl"
+                                            onLoad={() => setPreviewLoading(false)}
+                                            onError={() => { setPreviewError(true); setPreviewLoading(false); }}
+                                        />
+                                    </div>
+                                </div>
+                            )
                         )}
                     </div>
                 </DialogContent>

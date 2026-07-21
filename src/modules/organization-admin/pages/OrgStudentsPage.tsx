@@ -361,7 +361,7 @@ export default function OrgStudentsPage() {
                     <div className="w-1/6">Reg Number</div>
                     <div className="w-1/6">Branch & Year</div>
                     <div className="w-1/6">CGPA / Backlogs</div>
-                    <div className="w-1/6">Status</div>
+                    <div className="w-1/6 text-center">Status</div>
                     <div className="w-1/6 text-center">Actions</div>
                   </div>
 
@@ -400,7 +400,7 @@ export default function OrgStudentsPage() {
                             <span className="font-bold text-foreground">CGPA: {student.cgpa}</span>
                             <span className="text-[11px] text-red-400 block">{student.backlogs} active backlogs</span>
                           </div>
-                          <div className="w-1/6">
+                          <div className="w-1/6 flex justify-center">
                             <Badge variant={
                               student.status === 'verified' ? 'default' : 
                               student.status === 'pending' ? 'secondary' : 'destructive'
@@ -464,7 +464,7 @@ export default function OrgStudentsPage() {
                   <div className="flex border-b border-border bg-card/80 p-4 font-bold uppercase tracking-wider text-foreground text-xs">
                     <div className="w-1/4">Student Name</div>
                     <div className="w-1/4">Branch & Year</div>
-                    <div className="w-1/4">Account Status</div>
+                    <div className="w-1/4 text-center">Account Status</div>
                     <div className="w-1/4 text-center">Actions</div>
                   </div>
                   {paginatedStudents.map(student => (
@@ -483,7 +483,7 @@ export default function OrgStudentsPage() {
                         )}
                       </div>
                       <div className="w-1/4 text-foreground/80">{student.branch} · Year {student.current_year}</div>
-                      <div className="w-1/4">
+                      <div className="w-1/4 flex justify-center">
                         <Badge variant={student.account_status === 'Active' ? 'default' : 'destructive'} className="text-[10px] font-bold px-2 py-0.5">
                           {student.account_status}
                         </Badge>

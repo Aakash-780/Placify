@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useRole } from '@/context/RoleContext';
 import { insforge } from '@/lib/insforge';
 import { 
-  Building2, Search, FileText, Loader2, RefreshCw, Calendar, Globe, MapPin, ExternalLink, Mail
+  Building2, Search, FileText, Loader2, RefreshCw, Calendar, Globe, MapPin, ExternalLink, Mail, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,8 @@ import SubadminFeatureToggle from '@/components/SubadminFeatureToggle';
 
 type PageTabType = 'verification' | 'partners';
 
+const ITEMS_PER_PAGE = 10;
+
 export default function OrgRecruitersPage() {
   const { roleData } = useRole();
   const orgId = roleData?.organization_id;
@@ -25,9 +27,10 @@ export default function OrgRecruitersPage() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // Filters state
+  // Filters & Pagination state
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Modals state
   const [showRecruiterDetails, setShowRecruiterDetails] = useState<any | null>(null);
@@ -151,6 +154,17 @@ export default function OrgRecruitersPage() {
     return matchesSearch && matchesStatus;
   });
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchTerm, filterStatus]);
+
+  const totalRecruitersCount = filteredRecruiters.length;
+  const totalPages = Math.ceil(totalRecruitersCount / ITEMS_PER_PAGE) || 1;
+  const safeCurrentPage = Math.min(currentPage, totalPages) || 1;
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalRecruitersCount);
+  const paginatedRecruiters = filteredRecruiters.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
   return (
     <div className="flex-1 flex flex-col min-h-screen bg-background font-sans text-foreground p-8 space-y-8 max-w-7xl mx-auto w-full">
       {toast && (
@@ -194,7 +208,12 @@ export default function OrgRecruitersPage() {
         <div className="space-y-6 animate-fade-in">
           <div className="flex justify-between items-center">
             <div>
-              <h3 className="text-lg font-bold text-foreground">Recruiters Registry</h3>
+              <div className="flex items-center gap-2.5">
+                <h3 className="text-lg font-bold text-foreground">Recruiters Registry</h3>
+                <span className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 px-2.5 py-0.5 rounded text-[10px] font-bold">
+                  Total Count: {totalRecruitersCount}
+                </span>
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">Approve corporate registrations and review business validation documents.</p>
             </div>
 
@@ -255,18 +274,22 @@ export default function OrgRecruitersPage() {
                     <div className="w-1/5">Recruiter Name</div>
                     <div className="w-1/5">Email Address</div>
                     <div className="w-1/5">Validation Doc</div>
-                    <div className="w-1/5">Status</div>
-                    <div className="w-1/5 text-right">Actions</div>
+                    <div className="w-1/5 text-center">Status</div>
+                    <div className="w-1/5 text-center">Actions</div>
                   </div>
 
-                  {filteredRecruiters.length === 0 ? (
+                  {paginatedRecruiters.length === 0 ? (
                     <div className="p-8 text-center text-muted-foreground text-sm">No recruiters match verification filter criteria.</div>
                   ) : (
                     <div className="divide-y divide-slate-800">
-                      {filteredRecruiters.map(rec => {
+                      {paginatedRecruiters.map(rec => {
                         const comp = parseCompany(rec.company);
                         return (
-                          <div key={rec.id} className="flex p-4 items-center hover:bg-card/30 transition-colors text-sm">
+                          <div
+                            key={rec.id}
+                            className="flex p-4 items-center hover:bg-card/40 transition-colors text-sm cursor-pointer"
+                            onClick={() => setShowRecruiterDetails(rec)}
+                          >
                             <div className="w-1/5 font-bold text-foreground">{comp.name}</div>
                             <div className="w-1/5 text-foreground">{rec.name}</div>
                             <div className="w-1/5 font-mono text-foreground/80 text-xs">{rec.email}</div>
@@ -277,6 +300,7 @@ export default function OrgRecruitersPage() {
                                   target="_blank" 
                                   rel="noreferrer"
                                   className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 font-semibold"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
                                   <FileText className="w-3.5 h-3.5" />
                                   <span>Download PDF</span>
@@ -285,7 +309,7 @@ export default function OrgRecruitersPage() {
                                 <span className="text-muted-foreground">No Document</span>
                               )}
                             </div>
-                            <div className="w-1/5">
+                            <div className="w-1/5 flex justify-center">
                               <Badge variant={
                                 rec.verification_status === 'Verified' ? 'default' : 
                                 rec.verification_status === 'Pending' ? 'secondary' : 'destructive'
@@ -293,21 +317,15 @@ export default function OrgRecruitersPage() {
                                 {rec.verification_status}
                               </Badge>
                             </div>
-                            <div className="w-1/5 flex justify-end gap-1.5">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-[10px] font-bold border-border"
-                                onClick={() => setShowRecruiterDetails(rec)}
-                              >
-                                View Details
-                              </Button>
-
+                            <div className="w-1/5 flex justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                               {rec.verification_status !== 'Verified' && (
                                 <Button
                                   size="sm"
                                   className="h-7 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-foreground"
-                                  onClick={() => handleRecruiterVerify(rec, 'Verified')}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRecruiterVerify(rec, 'Verified');
+                                  }}
                                 >
                                   Verify
                                 </Button>
@@ -318,7 +336,10 @@ export default function OrgRecruitersPage() {
                                   size="sm"
                                   variant="destructive"
                                   className="h-7 text-[10px] font-bold"
-                                  onClick={() => handleRecruiterVerify(rec, 'Rejected')}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRecruiterVerify(rec, 'Rejected');
+                                  }}
                                 >
                                   Reject
                                 </Button>
@@ -329,7 +350,10 @@ export default function OrgRecruitersPage() {
                                   size="sm"
                                   variant="ghost"
                                   className="h-7 text-[10px] font-bold text-red-400 hover:text-red-300"
-                                  onClick={() => handleRecruiterVerify(rec, 'Suspended')}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRecruiterVerify(rec, 'Suspended');
+                                  }}
                                 >
                                   Suspend
                                 </Button>
@@ -346,34 +370,33 @@ export default function OrgRecruitersPage() {
                   <div className="flex border-b border-border bg-card/80 p-4 font-bold uppercase tracking-wider text-foreground text-xs">
                     <div className="w-1/4">Recruiter Name</div>
                     <div className="w-1/4">Company</div>
-                    <div className="w-1/4">Status</div>
-                    <div className="w-1/4 text-right">Actions</div>
+                    <div className="w-1/4 text-center">Status</div>
+                    <div className="w-1/4 text-center">Actions</div>
                   </div>
-                  {filteredRecruiters.map(rec => {
+                  {paginatedRecruiters.map(rec => {
                     const comp = parseCompany(rec.company);
                     return (
-                      <div key={rec.id} className="flex p-4 items-center hover:bg-card/30 text-sm">
+                      <div
+                        key={rec.id}
+                        className="flex p-4 items-center hover:bg-card/40 transition-colors text-sm cursor-pointer"
+                        onClick={() => setShowRecruiterDetails(rec)}
+                      >
                         <div className="w-1/4 font-semibold text-foreground">{rec.name}</div>
                         <div className="w-1/4 text-foreground/80">{comp.name}</div>
-                        <div className="w-1/4">
+                        <div className="w-1/4 flex justify-center">
                           <Badge variant={rec.status === 'Active' || rec.status === 'Verified' ? 'default' : 'destructive'} className="text-[10px] font-bold px-2 py-0.5">
                             {rec.status}
                           </Badge>
                         </div>
-                        <div className="w-1/4 flex justify-end gap-1.5">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-[10px] font-bold border-border"
-                            onClick={() => setShowRecruiterDetails(rec)}
-                          >
-                            View Details
-                          </Button>
+                        <div className="w-1/4 flex justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                           <Button
                             size="sm"
                             variant="ghost"
                             className="h-7 text-[10px] font-bold text-yellow-400"
-                            onClick={() => toggleUserActiveStatus(rec)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleUserActiveStatus(rec);
+                            }}
                           >
                             {rec.status === 'Active' || rec.status === 'Verified' ? 'Disable' : 'Enable'}
                           </Button>
@@ -381,7 +404,10 @@ export default function OrgRecruitersPage() {
                             size="sm"
                             variant="ghost"
                             className="h-7 text-[10px] font-bold text-red-500"
-                            onClick={() => handleDeleteUserAccount(rec)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteUserAccount(rec);
+                            }}
                           >
                             Delete
                           </Button>
@@ -389,12 +415,58 @@ export default function OrgRecruitersPage() {
                       </div>
                     );
                   })}
-                  {filteredRecruiters.length === 0 && (
+                  {paginatedRecruiters.length === 0 && (
                     <div className="p-8 text-center text-muted-foreground text-sm">No recruiters found.</div>
                   )}
                 </div>
               )}
             </div>
+
+            {/* Pagination Controls */}
+            {totalRecruitersCount > 0 && (
+              <div className="p-4 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground bg-card/20">
+                <div>
+                  Showing <span className="font-semibold text-foreground">{startIndex + 1}</span> to{' '}
+                  <span className="font-semibold text-foreground">{endIndex}</span> of{' '}
+                  <span className="font-semibold text-foreground">{totalRecruitersCount}</span> recruiters
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={safeCurrentPage <= 1}
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    className="h-8 border-border bg-card/50 hover:bg-card text-foreground text-[10px] font-bold px-3 rounded-lg flex items-center"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Previous
+                  </Button>
+                  <div className="flex items-center gap-1 font-mono text-[10px] text-foreground font-bold">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setCurrentPage(p)}
+                        className={`w-7 h-7 rounded-lg transition-colors ${
+                          p === safeCurrentPage
+                            ? 'bg-indigo-600 text-white'
+                            : 'hover:bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={safeCurrentPage >= totalPages}
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    className="h-8 border-border bg-card/50 hover:bg-card text-foreground text-[10px] font-bold px-3 rounded-lg flex items-center"
+                  >
+                    Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </Card>
         </div>
       )}
