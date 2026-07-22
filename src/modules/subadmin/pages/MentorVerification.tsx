@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import {
     ShieldCheck, Clock, FileText, CheckCircle, XCircle, HelpCircle,
     Building2, Linkedin, GraduationCap, Calendar, MessageSquare, AlertCircle, Search, DollarSign,
-    Mail, CheckCircle2, Eye, ZoomIn, ZoomOut, RotateCcw, Maximize, Minimize, Download
+    Mail, CheckCircle2, Eye, ZoomIn, ZoomOut, RotateCcw, Maximize, Minimize, Download,
+    ChevronLeft, ChevronRight
 } from 'lucide-react';
 import SubadminFeatureToggle from '@/components/SubadminFeatureToggle';
 
@@ -20,6 +21,11 @@ export default function MentorVerification() {
     const [loading, setLoading] = useState(true);
     const [filterTab, setFilterTab] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending');
     const [searchQuery, setSearchQuery] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filterTab, searchQuery]);
 
     // Action dialog state
     const [showActionDialog, setShowActionDialog] = useState(false);
@@ -357,103 +363,155 @@ export default function MentorVerification() {
                 </Card>
             ) : (
                 <div className="space-y-4">
-                    {filteredRequests.map(req => (
-                        <Card key={req.id} className="border border-border/80 bg-card hover:shadow-sm transition-all duration-300">
-                            <CardContent className="p-6 flex flex-col md:flex-row justify-between gap-6">
-                                <div className="space-y-3.5 flex-1 min-w-0">
-                                    <div className="flex items-center gap-2.5">
-                                        <h3 className="font-heading font-bold text-lg text-foreground">{req.mentor_profiles?.name}</h3>
-                                        {getStatusBadge(req.status)}
-                                    </div>
+                    {(() => {
+                        const ITEMS_PER_PAGE = 2;
+                        const totalItems = filteredRequests.length;
+                        const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+                        const paginatedRequests = filteredRequests.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-2 gap-x-6 text-xs text-muted-foreground">
-                                        <div className="flex items-center gap-1.5 text-foreground font-semibold">
-                                            <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
-                                            <span>{req.mentor_profiles?.job_role} @ {req.mentor_profiles?.company_name}</span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <GraduationCap className="w-4 h-4 shrink-0" />
-                                            <span>Branch: {req.mentor_profiles?.branch} | Batch: {req.mentor_profiles?.batch} ({req.mentor_profiles?.placement_type || 'On Campus'})</span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <Calendar className="w-4 h-4 shrink-0" />
-                                            <span>Applied: {new Date(req.created_at).toLocaleDateString()}</span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <FileText className="w-4 h-4 shrink-0" />
-                                            <span>Document Type: <span className="font-bold text-foreground">{req.document_type}</span></span>
-                                        </div>
-                                        {req.company_email && (
-                                            <div className="flex items-center gap-1.5">
-                                                <Mail className="w-4 h-4 shrink-0" />
-                                                <span>Work Email: <span className="text-primary font-mono">{req.company_email}</span></span>
-                                            </div>
-                                        )}
-                                        {req.mentor_profiles?.ctc && (
-                                            <div className="flex items-center gap-1.5">
-                                                <DollarSign className="w-4 h-4 shrink-0" />
-                                                <span>CTC: {req.mentor_profiles?.ctc}</span>
-                                            </div>
-                                        )}
-                                    </div>
+                        return (
+                            <>
+                                <div className="space-y-4">
+                                    {paginatedRequests.map(req => (
+                                        <Card key={req.id} className="border border-border/80 bg-card hover:shadow-sm transition-all duration-300">
+                                            <CardContent className="p-6 flex flex-col md:flex-row justify-between gap-6">
+                                                <div className="space-y-3.5 flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <h3 className="font-heading font-bold text-lg text-foreground">{req.mentor_profiles?.name}</h3>
+                                                        {getStatusBadge(req.status)}
+                                                    </div>
 
-                                    {/* Skills directly on card */}
-                                    {req.mentor_profiles?.mentor_skills?.length > 0 && (
-                                        <div className="text-xs pt-1 flex flex-wrap items-center gap-1.5">
-                                            <span className="font-bold text-muted-foreground mr-1 text-[10px] uppercase">Skills:</span>
-                                            {req.mentor_profiles.mentor_skills.map((s: any) => (
-                                                <Badge key={s.id} variant="secondary" className="text-[10px] font-medium px-2 py-0.5">
-                                                    {s.skill_name}
-                                                </Badge>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-2 gap-x-6 text-xs text-muted-foreground">
+                                                        <div className="flex items-center gap-1.5 text-foreground font-semibold">
+                                                            <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+                                                            <span>{req.mentor_profiles?.job_role} @ {req.mentor_profiles?.company_name}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <GraduationCap className="w-4 h-4 shrink-0" />
+                                                            <span>Branch: {req.mentor_profiles?.branch} | Batch: {req.mentor_profiles?.batch} ({req.mentor_profiles?.placement_type || 'On Campus'})</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Calendar className="w-4 h-4 shrink-0" />
+                                                            <span>Applied: {new Date(req.created_at).toLocaleDateString()}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <FileText className="w-4 h-4 shrink-0" />
+                                                            <span>Document Type: <span className="font-bold text-foreground">{req.document_type}</span></span>
+                                                        </div>
+                                                        {req.company_email && (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <Mail className="w-4 h-4 shrink-0" />
+                                                                <span>Work Email: <span className="text-primary font-mono">{req.company_email}</span></span>
+                                                            </div>
+                                                        )}
+                                                        {req.mentor_profiles?.ctc && (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <DollarSign className="w-4 h-4 shrink-0" />
+                                                                <span>CTC: {req.mentor_profiles?.ctc}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Skills directly on card */}
+                                                    {req.mentor_profiles?.mentor_skills?.length > 0 && (
+                                                        <div className="text-xs pt-1 flex flex-wrap items-center gap-1.5">
+                                                            <span className="font-bold text-muted-foreground mr-1 text-[10px] uppercase">Skills:</span>
+                                                            {req.mentor_profiles.mentor_skills.map((s: any) => (
+                                                                <Badge key={s.id} variant="secondary" className="text-[10px] font-medium px-2 py-0.5">
+                                                                    {s.skill_name}
+                                                                </Badge>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Services directly on card */}
+                                                    {req.mentor_profiles?.mentor_availability?.[0] && (
+                                                        <div className="text-xs flex flex-wrap items-center gap-1.5">
+                                                            <span className="font-bold text-muted-foreground mr-1 text-[10px] uppercase">Services Offered:</span>
+                                                            {(() => {
+                                                                const avail = req.mentor_profiles.mentor_availability[0];
+                                                                return (
+                                                                    <>
+                                                                        {avail.available_for_referral && <span className="text-[10px] text-sky-600 bg-sky-50 dark:bg-sky-950/20 px-2 py-0.5 rounded border border-sky-100 font-semibold">✓ Referral</span>}
+                                                                        {avail.available_for_mentorship && <span className="text-[10px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-100 font-semibold">✓ Mentorship</span>}
+                                                                        {avail.available_for_resume_review && <span className="text-[10px] text-indigo-600 bg-indigo-50 dark:bg-indigo-950/20 px-2 py-0.5 rounded border border-indigo-100 font-semibold">✓ Resume Review</span>}
+                                                                        {avail.available_for_mock_interview && <span className="text-[10px] text-purple-600 bg-purple-50 dark:bg-purple-950/20 px-2 py-0.5 rounded border border-purple-100 font-semibold">✓ Mock Interview</span>}
+                                                                    </>
+                                                                );
+                                                            })()}
+                                                        </div>
+                                                    )}
+
+                                                    {req.mentor_profiles?.about_me && (
+                                                        <div className="text-xs text-muted-foreground bg-muted/20 p-2.5 rounded border border-border/40 italic">
+                                                            "{req.mentor_profiles.about_me}"
+                                                        </div>
+                                                    )}
+
+                                                    {req.admin_notes && (
+                                                        <div className="p-3 bg-muted/40 rounded-lg border border-border/50 text-xs">
+                                                            <p className="font-bold text-foreground">Admin Feedback / Notes:</p>
+                                                            <p className="text-muted-foreground mt-1 italic">"{req.admin_notes}"</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex flex-row md:flex-col justify-end items-stretch gap-2 shrink-0 md:w-48 self-end md:self-center">
+                                                    <Button size="sm" className="h-9 bg-primary hover:bg-primary/95 text-white font-bold w-full flex items-center gap-1 justify-center" onClick={() => { setReviewRequest(req); setAdminNotes(''); setShowReviewDialog(true); }}>
+                                                        <ShieldCheck className="w-4 h-4" /> Review Application
+                                                    </Button>
+                                                    {req.mentor_profiles?.linkedin_url && (
+                                                        <Button size="sm" variant="outline" onClick={() => window.open(req.mentor_profiles.linkedin_url, '_blank')} className="h-8 font-semibold w-full">
+                                                            <Linkedin className="w-3.5 h-3.5 mr-1 text-sky-600" /> LinkedIn Profile
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+
+                                {totalPages > 1 && (
+                                    <div className="flex items-center justify-between border-t border-border/60 pt-4 mt-6">
+                                        <p className="text-xs text-muted-foreground font-medium">
+                                            Showing <span className="font-bold text-foreground">{Math.min(totalItems, (currentPage - 1) * ITEMS_PER_PAGE + 1)}-{Math.min(totalItems, currentPage * ITEMS_PER_PAGE)}</span> of <span className="font-bold text-foreground">{totalItems}</span> mentors
+                                        </p>
+                                        <div className="flex items-center gap-1.5">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={currentPage === 1}
+                                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                                className="h-8 px-2.5 rounded-lg text-xs font-bold gap-1"
+                                            >
+                                                <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                                            </Button>
+                                            {Array.from({ length: totalPages }).map((_, idx) => (
+                                                <Button
+                                                    key={idx}
+                                                    variant={currentPage === idx + 1 ? 'default' : 'outline'}
+                                                    size="sm"
+                                                    onClick={() => setCurrentPage(idx + 1)}
+                                                    className="h-8 w-8 rounded-lg text-xs font-bold p-0"
+                                                >
+                                                    {idx + 1}
+                                                </Button>
                                             ))}
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                disabled={currentPage === totalPages}
+                                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                                className="h-8 px-2.5 rounded-lg text-xs font-bold gap-1"
+                                            >
+                                                Next <ChevronRight className="w-3.5 h-3.5" />
+                                            </Button>
                                         </div>
-                                    )}
-
-                                    {/* Services directly on card */}
-                                    {req.mentor_profiles?.mentor_availability?.[0] && (
-                                        <div className="text-xs flex flex-wrap items-center gap-1.5">
-                                            <span className="font-bold text-muted-foreground mr-1 text-[10px] uppercase">Services Offered:</span>
-                                            {(() => {
-                                                const avail = req.mentor_profiles.mentor_availability[0];
-                                                return (
-                                                    <>
-                                                        {avail.available_for_referral && <span className="text-[10px] text-sky-600 bg-sky-50 dark:bg-sky-950/20 px-2 py-0.5 rounded border border-sky-100 font-semibold">✓ Referral</span>}
-                                                        {avail.available_for_mentorship && <span className="text-[10px] text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-100 font-semibold">✓ Mentorship</span>}
-                                                        {avail.available_for_resume_review && <span className="text-[10px] text-indigo-600 bg-indigo-50 dark:bg-indigo-950/20 px-2 py-0.5 rounded border border-indigo-100 font-semibold">✓ Resume Review</span>}
-                                                        {avail.available_for_mock_interview && <span className="text-[10px] text-purple-600 bg-purple-50 dark:bg-purple-950/20 px-2 py-0.5 rounded border border-purple-100 font-semibold">✓ Mock Interview</span>}
-                                                    </>
-                                                );
-                                            })()}
-                                        </div>
-                                    )}
-
-                                    {req.mentor_profiles?.about_me && (
-                                        <div className="text-xs text-muted-foreground bg-muted/20 p-2.5 rounded border border-border/40 italic">
-                                            "{req.mentor_profiles.about_me}"
-                                        </div>
-                                    )}
-
-                                    {req.admin_notes && (
-                                        <div className="p-3 bg-muted/40 rounded-lg border border-border/50 text-xs">
-                                            <p className="font-bold text-foreground">Admin Feedback / Notes:</p>
-                                            <p className="text-muted-foreground mt-1 italic">"{req.admin_notes}"</p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="flex flex-row md:flex-col justify-end items-stretch gap-2 shrink-0 md:w-48 self-end md:self-center">
-                                    <Button size="sm" className="h-9 bg-primary hover:bg-primary/95 text-white font-bold w-full flex items-center gap-1 justify-center" onClick={() => { setReviewRequest(req); setAdminNotes(''); setShowReviewDialog(true); }}>
-                                        <ShieldCheck className="w-4 h-4" /> Review Application
-                                    </Button>
-                                    {req.mentor_profiles?.linkedin_url && (
-                                        <Button size="sm" variant="outline" onClick={() => window.open(req.mentor_profiles.linkedin_url, '_blank')} className="h-8 font-semibold w-full">
-                                            <Linkedin className="w-3.5 h-3.5 mr-1 text-sky-600" /> LinkedIn Profile
-                                        </Button>
-                                    )}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
+                                    </div>
+                                )}
+                            </>
+                        );
+                    })()}
                 </div>
             )}
 

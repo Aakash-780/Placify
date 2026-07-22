@@ -224,6 +224,18 @@ export default function Applicants() {
         }
     }, [searchParams]);
 
+    const resetFilters = () => {
+        setSearch('');
+        setSelectedJob('all');
+        setCustomSkillQuery('');
+        setMinCgpaFilter(null);
+        setBranchFilter('all');
+        setGradYearFilter('all');
+        setPlacementFilter('all');
+        setSortBy('match');
+        setActiveChips([]);
+    };
+
     // Resume Preview state
     const [previewResumeUrl, setPreviewResumeUrl] = useState<string | null>(null);
     const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
@@ -667,7 +679,7 @@ export default function Applicants() {
                 <SubadminFeatureToggle featureKey="applications" />
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col sm:flex-row gap-3 items-center w-full">
                 <Select value={selectedJob} onValueChange={setSelectedJob}>
                     <SelectTrigger className="w-full sm:w-[320px]">
                         <SelectValue placeholder="All Jobs" />
@@ -679,10 +691,34 @@ export default function Applicants() {
                         ))}
                     </SelectContent>
                 </Select>
-                <div className="relative flex-1">
+                <div className="relative flex-1 w-full">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input placeholder="Search applicants by name..." className="pl-10" value={search} onChange={e => setSearch(e.target.value)} />
+                    <Input 
+                        placeholder="Search applicants by name..." 
+                        className="pl-10 pr-10" 
+                        value={search} 
+                        onChange={e => setSearch(e.target.value)} 
+                    />
+                    {search && (
+                        <button
+                            type="button"
+                            onClick={() => setSearch('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded-full hover:bg-muted"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    )}
                 </div>
+                {(search || selectedJob !== 'all' || customSkillQuery || minCgpaFilter !== null || branchFilter !== 'all' || gradYearFilter !== 'all' || placementFilter !== 'all' || activeChips.length > 0) && (
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={resetFilters}
+                        className="h-10 px-4 rounded-xl text-xs font-bold border-dashed border-primary/45 text-primary hover:bg-primary/10 shrink-0 flex items-center gap-1.5 w-full sm:w-auto justify-center"
+                    >
+                        <RotateCcw className="w-3.5 h-3.5" /> Clear Filters
+                    </Button>
+                )}
             </div>
 
             {/* AI Analyze Applicants Panel */}
