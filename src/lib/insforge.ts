@@ -35,7 +35,7 @@ const TABLES_NEEDING_ISOLATION = new Set([
     'audit_logs', 'alumni', 'referral_requests', 'coding_submissions',
     'dsa_progress', 'ats_scans', 'mock_interviews', 'resume_reviews',
     'off_campus_jobs', 'interview_rounds', 'application_status_history',
-    'mentor_profiles', 'dsa_questions', 'subadmins'
+    'mentor_profiles', 'dsa_questions', 'subadmins', 'dsa_companies'
 ]);
 
 // Create a Proxy for rawClient.database
