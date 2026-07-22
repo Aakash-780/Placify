@@ -155,7 +155,7 @@ export default function AdminDsaSheets() {
                 company_id: selectedCompany,
                 title: newQ.title.trim(),
                 leetcode_url: newQ.link.trim() || null,
-                difficulty: newQ.difficulty,
+                difficulty: newQ.difficulty ? (newQ.difficulty.charAt(0).toUpperCase() + newQ.difficulty.slice(1)) : 'Medium',
                 topic: newQ.topic.trim() || null
             }]).select();
 

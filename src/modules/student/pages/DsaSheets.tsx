@@ -229,7 +229,7 @@ export default function DsaSheets() {
                 company_id: selectedCompany,
                 title: newQ.title.trim(),
                 leetcode_url: newQ.link.trim(),
-                difficulty: newQ.difficulty,
+                difficulty: newQ.difficulty ? (newQ.difficulty.charAt(0).toUpperCase() + newQ.difficulty.slice(1)) : 'Medium',
                 topic: newQ.topic.trim()
             }]).select();
 
