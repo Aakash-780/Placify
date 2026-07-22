@@ -62,8 +62,8 @@ export default function AdminDsaSheets() {
 
     async function fetchCompanies() {
         try {
-            const { data } = await insforge.database.from('companies').select('*').order('name');
-            setCompanies(data || []);
+            const { data } = await insforge.database.from('dsa_companies').select('*').order('name');
+            setCompanies((data || []).map(c => ({ ...c, is_verified: true })));
         } catch (err: any) {
             console.error("Error fetching companies:", err);
             showToast("Failed to fetch companies", "error");
@@ -97,11 +97,11 @@ export default function AdminDsaSheets() {
         }
 
         try {
-            const { data, error } = await insforge.database.from('companies').insert({
+            const { data, error } = await insforge.database.from('dsa_companies').insert([{
                 name: newCompany.trim(),
-                is_verified: true, // Admin created companies are auto-verified
+                category: 'Product',
                 created_by: user?.id || null
-            }).select();
+            }]).select();
 
             if (error) {
                 if (error.message?.includes('unique') || error.code === '23505') {
@@ -113,9 +113,9 @@ export default function AdminDsaSheets() {
             }
 
             if (data && data.length > 0) {
-                setCompanies(prev => [...prev, data[0]].sort((a, b) => a.name.localeCompare(b.name)));
+                setCompanies(prev => [...prev, { ...data[0], is_verified: true }].sort((a, b) => a.name.localeCompare(b.name)));
                 setNewCompany('');
-                showToast("Company added and verified successfully!", "success");
+                showToast("Company added successfully!", "success");
             }
         } catch (err: any) {
             console.error("Error adding company:", err);
@@ -123,26 +123,11 @@ export default function AdminDsaSheets() {
         }
     }
 
-    async function handleToggleVerify(id: string, currentStatus: boolean) {
-        try {
-            const { error } = await insforge.database.from('companies').update({
-                is_verified: !currentStatus
-            }).eq('id', id);
-
-            if (error) throw error;
-
-            setCompanies(prev => prev.map(c => c.id === id ? { ...c, is_verified: !currentStatus } : c));
-            showToast(currentStatus ? "Company unverified" : "Company approved & verified!", "success");
-        } catch (err: any) {
-            console.error("Error toggling verification:", err);
-            showToast("Failed to update verification status.", "error");
-        }
-    }
 
     async function handleDeleteCompany(id: string) {
         if (!window.confirm("Are you sure? This will delete all associated questions.")) return;
         try {
-            await insforge.database.from('companies').delete().eq('id', id);
+            await insforge.database.from('dsa_companies').delete().eq('id', id);
             setCompanies(companies.filter(c => c.id !== id));
             showToast("Company deleted successfully", "success");
             if (selectedCompany === id) setSelectedCompany('');
@@ -166,14 +151,13 @@ export default function AdminDsaSheets() {
         }
 
         try {
-            const { data, error } = await insforge.database.from('dsa_questions').insert({
+            const { data, error } = await insforge.database.from('dsa_questions').insert([{
                 company_id: selectedCompany,
                 title: newQ.title.trim(),
                 leetcode_url: newQ.link.trim() || null,
                 difficulty: newQ.difficulty,
-                topic: newQ.topic.trim() || null,
-                created_by: user?.id || null
-            }).select();
+                topic: newQ.topic.trim() || null
+            }]).select();
 
             if (error) {
                 if (error.message?.includes('unique') || error.code === '23505') {
@@ -196,7 +180,6 @@ export default function AdminDsaSheets() {
     }
 
     async function handleDeleteQuestion(id: string) {
-        if (!window.confirm("Delete this question?")) return;
         try {
             await insforge.database.from('dsa_questions').delete().eq('id', id);
             setQuestions(questions.filter(q => q.id !== id));
@@ -253,19 +236,6 @@ export default function AdminDsaSheets() {
                                         )}
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={(e) => { e.stopPropagation(); handleToggleVerify(c.id, !!c.is_verified); }}
-                                            className={cn(
-                                                "h-7 px-2 text-[10px] font-bold border",
-                                                c.is_verified
-                                                    ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200"
-                                                    : "bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200"
-                                            )}
-                                        >
-                                            {c.is_verified ? "Verified" : "Verify"}
-                                        </Button>
                                         <Button
                                             variant="ghost"
                                             size="icon"

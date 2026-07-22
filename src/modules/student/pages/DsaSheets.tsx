@@ -73,13 +73,13 @@ export default function DsaSheets() {
         setLoading(true);
         try {
             const [compRes, qRes, studentsRes, adminsRes] = await Promise.all([
-                insforge.database.from('companies').select('*').order('name'),
+                insforge.database.from('dsa_companies').select('*').order('name'),
                 insforge.database.from('dsa_questions').select('*').order('created_at', { ascending: false }),
                 insforge.database.from('students').select('user_id, name'),
                 insforge.database.from('admins').select('user_id, name'),
             ]);
 
-            setCompanies(compRes.data || []);
+            setCompanies((compRes.data || []).map((c: any) => ({ ...c, is_verified: true })));
             setQuestions(qRes.data || []);
 
             // Build contributor map
@@ -121,11 +121,11 @@ export default function DsaSheets() {
                 setProgress(prev => prev.filter(p => p.id !== existing.id));
                 showToast("Question marked as unsolved", "info");
             } else {
-                const { data, error } = await insforge.database.from('dsa_progress').insert({
+                const { data, error } = await insforge.database.from('dsa_progress').insert([{
                     student_id: roleData.id,
                     question_id: questionId,
                     status: 'solved',
-                }).select();
+                }]).select();
                 if (error) throw error;
                 if (data) {
                     setProgress(prev => [...prev, ...data]);
@@ -159,13 +159,12 @@ export default function DsaSheets() {
         }
 
         try {
-            const { data, error } = await insforge.database.from('companies').insert({
+            const { data, error } = await insforge.database.from('dsa_companies').insert([{
                 name: formattedName,
                 logo_url: newCompanyForm.logoUrl.trim() || null,
                 category: newCompanyForm.category,
-                created_by: user?.id || null,
-                is_verified: false
-            }).select();
+                created_by: user?.id || null
+            }]).select();
 
             if (error) {
                 if (error.message?.includes('unique') || error.code === '23505') {
@@ -177,7 +176,7 @@ export default function DsaSheets() {
             }
 
             if (data && data.length > 0) {
-                setCompanies(prev => [...prev, data[0]]);
+                setCompanies(prev => [...prev, { ...data[0], is_verified: true }]);
                 showToast("Company added successfully!", "success");
                 setShowAddCompany(false);
                 setNewCompanyForm({ name: '', logoUrl: '', category: 'Product' });
@@ -226,14 +225,13 @@ export default function DsaSheets() {
         }
 
         try {
-            const { data, error } = await insforge.database.from('dsa_questions').insert({
+            const { data, error } = await insforge.database.from('dsa_questions').insert([{
                 company_id: selectedCompany,
                 title: newQ.title.trim(),
                 leetcode_url: newQ.link.trim(),
                 difficulty: newQ.difficulty,
-                topic: newQ.topic.trim(),
-                created_by: user?.id || null
-            }).select();
+                topic: newQ.topic.trim()
+            }]).select();
 
             if (error) {
                 if (error.message?.includes('unique') || error.code === '23505') {
