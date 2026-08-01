@@ -4,7 +4,7 @@ import {
   ShieldCheck, Loader2, LogOut, Settings, Activity, AlertCircle, 
   BarChart3, Bell, RefreshCw, X, Plus, Search, Calendar, Building2, 
   Key, Lock, Check, CheckCircle, Sun, Moon,
-  Mail, FileText, Building, User, ExternalLink, Users
+  Mail, FileText, Building, User, ExternalLink, Users, MoreVertical
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -208,7 +208,21 @@ export default function App() {
   const [umSearch, setUmSearch] = useState('');
   const [umRoleFilter, setUmRoleFilter] = useState<'all' | 'admin' | 'subadmin' | 'student' | 'recruiter'>('all');
   const [umOrgFilter, setUmOrgFilter] = useState<string>('all');
+  const [umPage, setUmPage] = useState(1);
   const [selectedUmUser, setSelectedUmUser] = useState<any | null>(null);
+  const [openUmDropdownId, setOpenUmDropdownId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setUmPage(1);
+  }, [umSearch, umRoleFilter, umOrgFilter]);
+
+  useEffect(() => {
+    const handleDocumentClick = () => {
+      setOpenUmDropdownId(null);
+    };
+    window.addEventListener('click', handleDocumentClick);
+    return () => window.removeEventListener('click', handleDocumentClick);
+  }, []);
   const [umNewPassword, setUmNewPassword] = useState('');
   const [umCredsError, setUmCredsError] = useState('');
   const [umCredsResetting, setUmCredsResetting] = useState(false);
@@ -2446,6 +2460,14 @@ export default function App() {
             return matchRole && matchOrg && (!q || (u.name||'').toLowerCase().includes(q) || (u.email||'').toLowerCase().includes(q) || orgName.includes(q));
           });
 
+          const UM_ITEMS_PER_PAGE = 6;
+          const totalUmUsers = filtered.length;
+          const totalUmPages = Math.ceil(totalUmUsers / UM_ITEMS_PER_PAGE) || 1;
+          const safeUmPage = Math.min(umPage, totalUmPages) || 1;
+          const umStartIndex = (safeUmPage - 1) * UM_ITEMS_PER_PAGE;
+          const umEndIndex = Math.min(umStartIndex + UM_ITEMS_PER_PAGE, totalUmUsers);
+          const paginatedUmUsers = filtered.slice(umStartIndex, umStartIndex + UM_ITEMS_PER_PAGE);
+
           type UType = 'admin'|'subadmin'|'student'|'recruiter';
           const TC: Record<UType, { label: string; color: string; bg: string; border: string }> = {
             admin:     { label: 'Org Admin',  color: 'text-amber-400',   bg: 'bg-amber-500/10',   border: 'border-amber-500/25' },
@@ -2555,14 +2577,14 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-900/60 text-xs">
-                      {filtered.length === 0 ? (
+                      {paginatedUmUsers.length === 0 ? (
                         <tr>
                           <td colSpan={7} className="p-8 text-center text-xs text-slate-500">
                             No users registered matching search and filter options.
                           </td>
                         </tr>
                       ) : (
-                        filtered.map(u => {
+                        paginatedUmUsers.map(u => {
                           const tc = TC[u._type as UType];
                           const orgName = organizations.find((o: any) => o.id === u.organization_id)?.name || 'Platform';
 
@@ -2591,41 +2613,75 @@ export default function App() {
                                 </span>
                               </td>
                               <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex gap-2 justify-end">
-                                  {/* Toggle Status Action */}
-                                  {u._status === 'Active' ? (
+                                <div className="flex justify-end relative">
+                                  {/* Custom Dropdown Menu */}
+                                  <div className="relative inline-block text-left">
                                     <button
-                                      onClick={() => { setSelectedUmUser(u); handleUmStatusChange('Suspended'); }}
-                                      className="px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-850 text-[10px] font-bold transition-colors text-yellow-500 hover:bg-yellow-500/5 border border-slate-800"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenUmDropdownId(openUmDropdownId === u.id ? null : u.id);
+                                      }}
+                                      className="h-8 w-8 rounded-lg bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-white flex items-center justify-center border border-slate-800 transition-colors"
                                     >
-                                      Suspend
+                                      <MoreVertical className="h-4 w-4" />
                                     </button>
-                                  ) : (
-                                    <button
-                                      onClick={() => { setSelectedUmUser(u); handleUmStatusChange('Active'); }}
-                                      className="px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-850 text-[10px] font-bold transition-colors text-emerald-400 hover:bg-emerald-500/5 border border-slate-800"
-                                    >
-                                      Activate
-                                    </button>
-                                  )}
-
-                                  {/* Reset Password Modal Action */}
-                                  <button
-                                    onClick={() => { setSelectedUmUser(u); setUmCredsSuccess(null); setUmCredsError(''); setUmNewPassword(''); }}
-                                    className="px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-bold transition-colors text-purple-400 flex items-center gap-1 border border-slate-800"
-                                    title="Reset Password"
-                                  >
-                                    <Key className="w-3.5 h-3.5" /> Credentials
-                                  </button>
-
-                                  {/* Delete Action */}
-                                  <button
-                                    onClick={() => { setSelectedUmUser(u); handleUmStatusChange('__delete__'); }}
-                                    className="px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-[10px] font-bold transition-colors text-red-400 flex items-center gap-1 border border-slate-800"
-                                    title="Delete User"
-                                  >
-                                    Delete
-                                  </button>
+                                    
+                                    {openUmDropdownId === u.id && (
+                                      <div className="absolute right-0 mt-1 w-36 rounded-xl bg-slate-950 border border-slate-900 shadow-2xl z-50 py-1 text-left animate-fade-in">
+                                        {u._status === 'Active' ? (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedUmUser(u);
+                                              handleUmStatusChange('Suspended');
+                                              setOpenUmDropdownId(null);
+                                            }}
+                                            className="w-full px-3 py-2 text-[10px] font-bold text-yellow-500 hover:bg-slate-900/50 flex items-center transition-colors text-left"
+                                          >
+                                            Suspend
+                                          </button>
+                                        ) : (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setSelectedUmUser(u);
+                                              handleUmStatusChange('Active');
+                                              setOpenUmDropdownId(null);
+                                            }}
+                                            className="w-full px-3 py-2 text-[10px] font-bold text-emerald-400 hover:bg-slate-900/50 flex items-center transition-colors text-left"
+                                          >
+                                            Activate
+                                          </button>
+                                        )}
+                                        
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedUmUser(u);
+                                            setUmCredsSuccess(null);
+                                            setUmCredsError('');
+                                            setUmNewPassword('');
+                                            setOpenUmDropdownId(null);
+                                          }}
+                                          className="w-full px-3 py-2 text-[10px] font-bold text-purple-400 hover:bg-slate-900/50 flex items-center gap-1 transition-colors text-left"
+                                        >
+                                          <Key className="w-3.5 h-3.5" /> Credentials
+                                        </button>
+                                        
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedUmUser(u);
+                                            handleUmStatusChange('__delete__');
+                                            setOpenUmDropdownId(null);
+                                          }}
+                                          className="w-full px-3 py-2 text-[10px] font-bold text-red-500 hover:bg-slate-900/50 flex items-center transition-colors text-left"
+                                        >
+                                          Delete
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               </td>
                             </tr>
@@ -2635,6 +2691,46 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {totalUmUsers > 0 && (
+                  <div className="p-4 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 bg-slate-900/10">
+                    <div>
+                      Showing <span className="font-semibold text-slate-300">{umStartIndex + 1}</span> to{' '}
+                      <span className="font-semibold text-slate-300">{umEndIndex}</span> of{' '}
+                      <span className="font-semibold text-slate-300">{totalUmUsers}</span> users
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={safeUmPage === 1}
+                        onClick={() => setUmPage(p => Math.max(1, p - 1))}
+                        className="px-3 py-1.5 rounded-lg border border-slate-900 text-[11px] font-bold transition-all text-slate-300 hover:text-white hover:bg-slate-900 disabled:opacity-50 disabled:hover:bg-transparent"
+                      >
+                        Previous
+                      </button>
+                      {Array.from({ length: totalUmPages }, (_, i) => i + 1).map(pageNum => (
+                        <button
+                          key={pageNum}
+                          onClick={() => setUmPage(pageNum)}
+                          className={`h-7 w-7 rounded-lg text-[11px] font-bold transition-all ${
+                            safeUmPage === pageNum 
+                              ? 'bg-blue-600 text-white' 
+                              : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      ))}
+                      <button
+                        disabled={safeUmPage === totalUmPages}
+                        onClick={() => setUmPage(p => Math.min(totalUmPages, p + 1))}
+                        className="px-3 py-1.5 rounded-lg border border-slate-900 text-[11px] font-bold transition-all text-slate-300 hover:text-white hover:bg-slate-900 disabled:opacity-50 disabled:hover:bg-transparent"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           );

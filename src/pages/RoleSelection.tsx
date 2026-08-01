@@ -79,10 +79,12 @@ export default function RoleSelection() {
                 } else if (!/\S+@\S+\.\S+/.test(personalEmail)) {
                     errs.personalEmail = 'Enter a valid personal email';
                 }
-                if (phone.trim()) {
-                    const digits = phone.replace(/[\s\-+()]/g, '');
-                    if (!/^\d{10,13}$/.test(digits)) {
-                        errs.phone = 'Enter a valid phone number (10-13 digits)';
+                if (!phone.trim()) {
+                    errs.phone = 'Phone number is required';
+                } else {
+                    const digits = phone.replace(/\D/g, '');
+                    if (digits.length !== 12) {
+                        errs.phone = 'Phone number must have exactly 10 digits after the country code';
                     }
                 }
             } else if (stepNum === 2) {
@@ -642,7 +644,15 @@ export default function RoleSelection() {
                                             <Label>Phone Number</Label>
                                             <Input
                                                 value={phone}
-                                                onChange={e => setPhone(e.target.value)}
+                                                onChange={e => {
+                                                    let val = e.target.value;
+                                                    if (val && !val.startsWith('+')) {
+                                                        if (/^\d/.test(val)) {
+                                                            val = '+91 ' + val;
+                                                        }
+                                                    }
+                                                    setPhone(val);
+                                                }}
                                                 placeholder="+91 9876543210"
                                                 className={cn(touched.phone && errors.phone && 'border-destructive focus-visible:ring-destructive')}
                                             />

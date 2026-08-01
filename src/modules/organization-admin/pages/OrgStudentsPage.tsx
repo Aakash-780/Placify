@@ -2,23 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { useRole } from '@/context/RoleContext';
 import { insforge } from '@/lib/insforge';
 import { 
-  Users, GraduationCap, Search, CheckCircle, Clock, Award, Loader2, AlertCircle, RefreshCw, Calendar, FileText, ChevronLeft, ChevronRight
+  Users, GraduationCap, Search, CheckCircle, Clock, Award, Loader2, AlertCircle, RefreshCw, Calendar, FileText, ChevronLeft, ChevronRight, MoreVertical
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { 
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem 
+} from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import SubadminFeatureToggle from '@/components/SubadminFeatureToggle';
-
-type PageTabType = 'verification' | 'cohort';
 
 export default function OrgStudentsPage() {
   const { roleData } = useRole();
   const orgId = roleData?.organization_id;
   const orgName = roleData?.organizations?.name || 'Organization';
-
-  const [activeTab, setActiveTab] = useState<PageTabType>('cohort');
   const [students, setStudents] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 5;
@@ -92,7 +91,7 @@ export default function OrgStudentsPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterBranch, filterYear, filterStatus, activeTab]);
+  }, [searchTerm, filterBranch, filterYear, filterStatus]);
 
   // Verification actions for student
   async function handleStudentVerify(student: any, status: 'verified' | 'rejected' | 'suspended') {
@@ -205,13 +204,6 @@ export default function OrgStudentsPage() {
 
   // Filters calculations
   const filteredStudents = students.filter(s => {
-    if (activeTab === 'verification' && s.status === 'verified') {
-      return false;
-    }
-    if (activeTab === 'cohort' && s.status !== 'verified') {
-      return false;
-    }
-
     const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           (s.college_id && s.college_id.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesBranch = filterBranch === 'All' || s.branch === filterBranch;
@@ -219,26 +211,14 @@ export default function OrgStudentsPage() {
     
     let matchesStatus = true;
     if (filterStatus !== 'All') {
-      if (activeTab === 'cohort') {
-        if (filterStatus === 'Verified') {
-          matchesStatus = s.account_status === 'Active';
-        } else if (filterStatus === 'Pending') {
-          matchesStatus = s.account_status === 'Pending';
-        } else if (filterStatus === 'Suspended') {
-          matchesStatus = s.account_status === 'Suspended';
-        } else if (filterStatus === 'Rejected') {
-          matchesStatus = s.status === 'rejected' || s.verification_status === 'Rejected';
-        }
-      } else {
-        if (filterStatus === 'Verified') {
-          matchesStatus = s.status === 'verified';
-        } else if (filterStatus === 'Pending') {
-          matchesStatus = s.status === 'pending';
-        } else if (filterStatus === 'Suspended') {
-          matchesStatus = s.status === 'suspended';
-        } else if (filterStatus === 'Rejected') {
-          matchesStatus = s.status === 'rejected';
-        }
+      if (filterStatus === 'Verified') {
+        matchesStatus = s.status === 'verified';
+      } else if (filterStatus === 'Pending') {
+        matchesStatus = s.status === 'pending';
+      } else if (filterStatus === 'Suspended') {
+        matchesStatus = s.status === 'suspended';
+      } else if (filterStatus === 'Rejected') {
+        matchesStatus = s.status === 'rejected';
       }
     }
 
@@ -306,26 +286,6 @@ export default function OrgStudentsPage() {
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">Manage and verify student accounts, CGPA, and placement information.</p>
             </div>
-
-            {/* Sub-tab switcher */}
-            <div className="flex bg-card p-1 border border-border rounded-xl text-xs font-bold gap-1">
-              {[
-                { id: 'cohort', label: 'Enrolled Cohort' },
-                { id: 'verification', label: 'Verification Queue' }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => { setActiveTab(tab.id as PageTabType); setSearchTerm(''); }}
-                  className={`px-4 py-2 rounded-lg transition-all ${
-                    activeTab === tab.id 
-                      ? 'bg-card text-foreground border border-border' 
-                      : 'text-foreground/80 hover:text-foreground'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Filters */}
@@ -379,173 +339,120 @@ export default function OrgStudentsPage() {
 
           <Card className="border border-border bg-card/60 overflow-hidden shadow-xl">
             <div className="overflow-x-auto text-sm font-sans">
-              {activeTab === 'verification' ? (
-                <div>
-                  <div className="flex border-b border-border bg-card/80 p-4 font-bold uppercase tracking-wider text-foreground text-xs">
-                    <div className="w-1/6">Student Info</div>
-                    <div className="w-1/6">Reg Number</div>
-                    <div className="w-1/6">Branch & Year</div>
-                    <div className="w-1/6">CGPA / Backlogs</div>
-                    <div className="w-1/6 text-center">Status</div>
-                    <div className="w-1/6 text-center">Actions</div>
-                  </div>
+              <div>
+                <div className="flex border-b border-border bg-card/80 p-4 font-bold uppercase tracking-wider text-foreground text-xs">
+                  <div className="w-[25%]">Student Info</div>
+                  <div className="w-[15%]">Reg Number</div>
+                  <div className="w-[20%]">Branch & Year</div>
+                  <div className="w-[15%]">CGPA / Backlogs</div>
+                  <div className="w-[12%] text-center">Status</div>
+                  <div className="w-[13%] text-center">Actions</div>
+                </div>
 
-                  {paginatedStudents.length === 0 ? (
-                    <div className="p-8 text-center text-muted-foreground text-sm">No students match verification filter criteria.</div>
-                  ) : (
-                    <div className="divide-y divide-slate-800">
-                      {paginatedStudents.map(student => (
-                        <div 
-                          key={student.id} 
-                          className="flex p-4 items-center hover:bg-card/30 transition-colors text-sm cursor-pointer group"
-                          onClick={() => setShowProfileDetails(student)}
-                          title="Click to view profile"
-                        >
-                          <div className="w-1/6 flex items-center gap-3">
-                            {student.profile_photo_url ? (
-                              <img src={student.profile_photo_url} alt="" className="w-8 h-8 rounded-full object-cover border border-border" />
-                            ) : (
-                              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center font-bold text-xs text-indigo-400">
-                                {student.name.slice(0,2).toUpperCase()}
-                              </div>
-                            )}
-                            <div className="overflow-hidden">
-                              <span className="font-bold block text-foreground truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:underline">{student.name}</span>
-                              <span className="text-xs text-muted-foreground block truncate max-w-[140px]">{student.email}</span>
-                              {student.approved_by_name && (
-                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold block mt-0.5 truncate">
-                                  Approved by {student.approved_by_name}
-                                </span>
-                              )}
+                {paginatedStudents.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground text-sm">No students found matching filters.</div>
+                ) : (
+                  <div className="divide-y divide-slate-800">
+                    {paginatedStudents.map(student => (
+                      <div 
+                        key={student.id} 
+                        className="flex p-4 items-center hover:bg-card/30 transition-colors text-sm cursor-pointer group"
+                        onClick={() => setShowProfileDetails(student)}
+                        title="Click to view profile"
+                      >
+                        <div className="w-[25%] flex items-center gap-3">
+                          {student.profile_photo_url ? (
+                            <img src={student.profile_photo_url} alt="" className="w-8 h-8 rounded-full object-cover border border-border" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center font-bold text-xs text-indigo-400">
+                              {student.name.slice(0,2).toUpperCase()}
                             </div>
-                          </div>
-                          <div className="w-1/6 font-mono font-bold text-foreground/80 text-xs">{student.college_id || '—'}</div>
-                          <div className="w-1/6 text-foreground">{student.branch || '—'} · Year {student.current_year || '—'}</div>
-                          <div className="w-1/6 text-foreground/80">
-                            <span className="font-bold text-foreground">CGPA: {student.cgpa}</span>
-                            <span className="text-[11px] text-red-400 block">{student.backlogs} active backlogs</span>
-                          </div>
-                          <div className="w-1/6 flex justify-center">
-                            <Badge variant={
-                              student.status === 'verified' ? 'default' : 
-                              student.status === 'pending' ? 'secondary' : 'destructive'
-                            } className="text-[10px] font-bold px-2 py-0.5">
-                              {student.status === 'verified' ? 'Verified' : 
-                               student.status === 'pending' ? 'Pending' :
-                               student.status === 'rejected' ? 'Rejected' : 'Suspended'}
-                            </Badge>
-                          </div>
-                          <div className="w-1/6 flex justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                            {student.status === 'verified' && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-[10px] font-bold border-border hover:bg-card text-indigo-400 hover:text-indigo-300"
-                                onClick={() => setResetPasswordStudent(student)}
-                              >
-                                Reset Password
-                              </Button>
-                            )}
-                            
-                            {student.status !== 'verified' && (
-                              <Button
-                                size="sm"
-                                className="h-7 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-foreground"
-                                onClick={() => handleStudentVerify(student, 'verified')}
-                              >
-                                Verify
-                              </Button>
-                            )}
-
-                            {student.status === 'pending' && (
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                className="h-7 text-[10px] font-bold"
-                                onClick={() => handleStudentVerify(student, 'rejected')}
-                              >
-                                Reject
-                              </Button>
-                            )}
-
-                            {student.status === 'verified' && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 text-[10px] font-bold text-red-400 hover:text-red-300"
-                                onClick={() => handleStudentVerify(student, 'suspended')}
-                              >
-                                Suspend
-                              </Button>
+                          )}
+                          <div className="overflow-hidden">
+                            <span className="font-bold block text-foreground truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:underline">{student.name}</span>
+                            <span className="text-xs text-muted-foreground block truncate max-w-[140px]">{student.email}</span>
+                            {student.approved_by_name && (
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold block mt-0.5 truncate">
+                                Approved by {student.approved_by_name}
+                              </span>
                             )}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  <div className="flex border-b border-border bg-card/80 p-4 font-bold uppercase tracking-wider text-foreground text-xs">
-                    <div className="w-1/4">Student Name</div>
-                    <div className="w-1/4">Branch & Year</div>
-                    <div className="w-1/4 text-center">Account Status</div>
-                    <div className="w-1/4 text-center">Actions</div>
+                        <div className="w-[15%] font-mono font-bold text-foreground/80 text-xs">{student.college_id || '—'}</div>
+                        <div className="w-[20%] text-foreground">{student.branch || '—'} · Year {student.current_year || '—'}</div>
+                        <div className="w-[15%] text-foreground/80">
+                          <span className="font-bold text-foreground">CGPA: {student.cgpa}</span>
+                          <span className="text-[11px] text-red-400 block">{student.backlogs} active backlogs</span>
+                        </div>
+                        <div className="w-[12%] flex justify-center">
+                          <Badge variant={
+                            student.status === 'verified' ? 'default' : 
+                            student.status === 'pending' ? 'secondary' : 'destructive'
+                          } className="text-[10px] font-bold px-2 py-0.5">
+                            {student.status === 'verified' ? 'Verified' : 
+                             student.status === 'pending' ? 'Pending' :
+                             student.status === 'rejected' ? 'Rejected' : 'Suspended'}
+                          </Badge>
+                        </div>
+                        <div className="w-[13%] flex justify-center" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Open menu</span>
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="bg-card border border-border shadow-xl text-xs min-w-[140px]">
+                              {student.status !== 'verified' && (
+                                <DropdownMenuItem
+                                  onClick={() => handleStudentVerify(student, 'verified')}
+                                  className="text-emerald-400 hover:text-emerald-300 font-medium cursor-pointer"
+                                >
+                                  Verify Account
+                                </DropdownMenuItem>
+                              )}
+                              {student.status === 'pending' && (
+                                <DropdownMenuItem
+                                  onClick={() => handleStudentVerify(student, 'rejected')}
+                                  className="text-red-400 hover:text-red-300 font-medium cursor-pointer"
+                                >
+                                  Reject Request
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem
+                                onClick={() => setResetPasswordStudent(student)}
+                                className="text-indigo-400 hover:text-indigo-300 font-medium cursor-pointer"
+                              >
+                                Reset Password
+                              </DropdownMenuItem>
+                              {student.status === 'verified' && (
+                                <DropdownMenuItem
+                                  onClick={() => handleStudentVerify(student, 'suspended')}
+                                  className="text-yellow-400 hover:text-yellow-300 font-medium cursor-pointer"
+                                >
+                                  Suspend Student
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem
+                                onClick={() => toggleUserActiveStatus(student)}
+                                className="text-slate-300 hover:text-white font-medium cursor-pointer"
+                              >
+                                {student.account_status === 'Active' ? 'Disable Account' : 'Enable Account'}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleDeleteUserAccount(student)}
+                                className="text-red-500 hover:text-red-400 font-bold cursor-pointer"
+                              >
+                                Delete Account
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  {paginatedStudents.map(student => (
-                    <div 
-                      key={student.id} 
-                      className="flex p-4 items-center hover:bg-card/30 text-sm cursor-pointer group"
-                      onClick={() => setShowProfileDetails(student)}
-                      title="Click to view profile"
-                    >
-                      <div className="w-1/4">
-                        <span className="font-semibold text-foreground block group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:underline">{student.name}</span>
-                        {student.approved_by_name && (
-                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold block mt-0.5">
-                            Approved by {student.approved_by_name}
-                          </span>
-                        )}
-                      </div>
-                      <div className="w-1/4 text-foreground/80">{student.branch} · Year {student.current_year}</div>
-                      <div className="w-1/4 flex justify-center">
-                        <Badge variant={student.account_status === 'Active' ? 'default' : 'destructive'} className="text-[10px] font-bold px-2 py-0.5">
-                          {student.account_status}
-                        </Badge>
-                      </div>
-                      <div className="w-1/4 flex justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-[10px] font-bold border-border hover:bg-card text-indigo-400 hover:text-indigo-300"
-                            onClick={() => setResetPasswordStudent(student)}
-                          >
-                            Reset Password
-                          </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-[10px] font-bold text-yellow-400"
-                          onClick={() => toggleUserActiveStatus(student)}
-                        >
-                          {student.account_status === 'Active' ? 'Disable' : 'Enable'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-[10px] font-bold text-red-500"
-                          onClick={() => handleDeleteUserAccount(student)}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                  {paginatedStudents.length === 0 && (
-                    <div className="p-8 text-center text-muted-foreground text-sm">No students found.</div>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             {/* Pagination Controls */}

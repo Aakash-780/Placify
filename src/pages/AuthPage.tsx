@@ -11,11 +11,12 @@ import { Badge } from '@/components/ui/badge';
 import {
   Mail, Lock, Eye, EyeOff, Loader2, ArrowLeft, Sparkles, Search,
   CheckCircle, ArrowRight, BookOpen, GraduationCap, Cpu, ShieldCheck, AlertCircle, Sun, Moon,
-  Building2, Upload, Globe, ChevronLeft, ChevronRight, Check, AlertTriangle, FileText, Download, ShieldAlert, BadgeCheck, Building, Shield
+  Building2, Upload, Globe, ChevronLeft, ChevronRight, Check, AlertTriangle, FileText, Download, ShieldAlert, BadgeCheck, Building, Shield, User, Phone
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { sha256, encryptPassword } from '@/utils/crypto';
 import { RegistrationSuccessModal, type RegistrationRole } from '@/components/ui/RegistrationSuccessModal';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 
 const SLIDES = [
@@ -113,6 +114,20 @@ export default function AuthPage() {
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [recName, setRecName] = useState('');
+
+  // Student Setup States
+  const [studentStep, setStudentStep] = useState(1);
+  const [studentName, setStudentName] = useState('');
+  const [studentPhone, setStudentPhone] = useState('');
+  const [studentCourse, setStudentCourse] = useState('B.Tech');
+  const [studentBranch, setStudentBranch] = useState('CSE');
+  const [studentYear, setStudentYear] = useState('3');
+  const [studentGraduationYear, setStudentGraduationYear] = useState((new Date().getFullYear() + 1).toString());
+  const [studentCgpa, setStudentCgpa] = useState('');
+  const [studentLogoUrl, setStudentLogoUrl] = useState('');
+  const [studentResumeUrl, setStudentResumeUrl] = useState('');
+  const [uploadingStudentLogo, setUploadingStudentLogo] = useState(false);
+  const [uploadingStudentResume, setUploadingStudentResume] = useState(false);
   const [recConfirmPassword, setRecConfirmPassword] = useState('');
 
   // Registration Success Modal
@@ -227,6 +242,15 @@ export default function AuthPage() {
       }));
     }
   }, [orgForm, generatedCode, onboardingStep, intendedRole]);
+
+  // Keep student graduation year updated when current year changes
+  useEffect(() => {
+    const yearInt = parseInt(studentYear);
+    if (!isNaN(yearInt)) {
+      const currentYearNum = new Date().getFullYear();
+      setStudentGraduationYear((currentYearNum + (4 - yearInt) + 1).toString());
+    }
+  }, [studentYear]);
 
   // Scroll right column to top when error is set to make sure it is visible
   useEffect(() => {
@@ -1297,7 +1321,7 @@ export default function AuthPage() {
     return (
       <div ref={orgSelectorRef} className="space-y-1.5 relative">
         <Label htmlFor={`${idPrefix}Org`} className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
-          Organization
+          Organization *
         </Label>
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60 z-10" />
@@ -1466,6 +1490,28 @@ export default function AuthPage() {
         {/* STEP 1: ORGANIZATION DETAILS */}
         {onboardingStep === 1 && (
           <div className="space-y-4 animate-fade-in">
+            {/* Register As Role */}
+            <div className="space-y-1.5">
+              <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                Register As
+              </Label>
+              <div className="flex gap-2">
+                {['student', 'recruiter', 'organization'].map(r => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => { setIntendedRole(r as any); setError(''); }}
+                    className={`flex-1 py-2.5 text-[10px] sm:text-xs font-extrabold rounded-xl border transition-all uppercase tracking-wider ${intendedRole === r
+                      ? 'border-primary bg-primary/5 text-primary shadow-sm shadow-primary/5'
+                      : 'border-border/85 bg-background/30 text-muted-foreground hover:text-foreground'
+                      }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3.5">
               <div className="space-y-1.5 col-span-2">
                 <Label htmlFor="orgName" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Organization Name *</Label>
@@ -1882,7 +1928,7 @@ export default function AuthPage() {
               if (onboardingStep > 1) {
                 setOnboardingStep(prev => prev - 1);
               } else {
-                setIntendedRole('student');
+                setMode('signin');
               }
             }}
             className="h-10 px-4 text-xs font-bold border-border/85"
@@ -1970,11 +2016,32 @@ export default function AuthPage() {
           ))}
         </div>
 
-        {/* STEP 1: BRAND & CONTACT */}
         {recStep === 1 && (
           <div className="space-y-4 animate-fade-in">
             {/* Organization Selector */}
             {renderOrgSelector('signup')}
+
+            {/* Register As Role */}
+            <div className="space-y-1.5">
+              <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                Register As
+              </Label>
+              <div className="flex gap-2">
+                {['student', 'recruiter', 'organization'].map(r => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => { setIntendedRole(r as any); setError(''); }}
+                    className={`flex-1 py-2.5 text-[10px] sm:text-xs font-extrabold rounded-xl border transition-all uppercase tracking-wider ${intendedRole === r
+                      ? 'border-primary bg-primary/5 text-primary shadow-sm shadow-primary/5'
+                      : 'border-border/85 bg-background/30 text-muted-foreground hover:text-foreground'
+                      }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <div className="grid grid-cols-2 gap-3.5">
               <div className="space-y-1.5 col-span-2">
@@ -2273,7 +2340,7 @@ export default function AuthPage() {
               if (recStep > 1) {
                 setRecStep(prev => prev - 1);
               } else {
-                setIntendedRole('student');
+                setMode('signin');
               }
             }}
             className="h-10 px-4 text-xs font-bold border-border/85"
@@ -2304,6 +2371,644 @@ export default function AuthPage() {
             <Button
               type="button"
               onClick={handleRecruiterSubmit}
+              disabled={loading || isUploading}
+              className="h-10 px-6 text-xs font-extrabold shadow-md shadow-primary/15 hover:shadow-lg hover:shadow-primary/25 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {loading ? (
+                <><Loader2 className="w-4.5 h-4.5 mr-1.5 animate-spin" /> Registering...</>
+              ) : (
+                'Submit Registration'
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const handleStudentFileUpload = async (field: 'photo' | 'resume', file: File) => {
+    const isPhoto = field === 'photo';
+    const setUploading = isPhoto ? setUploadingStudentLogo : setUploadingStudentResume;
+    const setUrl = isPhoto ? setStudentLogoUrl : setStudentResumeUrl;
+    const bucket = isPhoto ? 'profile-images' : 'resumes';
+
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    const allowedTypes = isPhoto 
+      ? ['image/png', 'image/jpeg', 'image/jpg'] 
+      : ['application/pdf'];
+
+    if (file.size > maxSize) {
+      setError('File size exceeds 5MB limit.');
+      return;
+    }
+    if (!allowedTypes.includes(file.type)) {
+      setError(isPhoto ? 'Only PNG and JPEG images are allowed.' : 'Only PDF resumes are allowed.');
+      return;
+    }
+
+    setError('');
+    setUploading(true);
+
+    try {
+      const storagePath = `student-onboarding/${Date.now()}_${file.name}`;
+      const { data, error } = await insforge.storage.from(bucket).upload(storagePath, file);
+
+      if (error) throw error;
+
+      const urlResult = insforge.storage.from(bucket).getPublicUrl(storagePath);
+      const fileUrl: string =
+        (urlResult as any)?.data?.publicUrl ||
+        (urlResult as any)?.publicUrl ||
+        (urlResult as any)?.data?.url ||
+        String(urlResult);
+
+      setUrl(fileUrl);
+    } catch (err: any) {
+      setError(err.message || 'Upload failed. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const validateStudentStep = (stepNum: number) => {
+    const errs: Record<string, string> = {};
+    if (stepNum === 1) {
+      if (!selectedOrgId) errs.org = 'College/Organization selection is required';
+      if (!studentName.trim()) errs.name = 'Full name is required';
+      if (!email.trim()) {
+        errs.email = 'Personal email is required';
+      } else if (!/\S+@\S+\.\S+/.test(email)) {
+        errs.email = 'Enter a valid personal email';
+      }
+      if (!password.trim()) {
+        errs.password = 'Password is required';
+      } else if (password.length < 6) {
+        errs.password = 'Password must be at least 6 characters';
+      }
+      if (!studentPhone.trim()) {
+        errs.phone = 'Phone number is required';
+      } else {
+        const digits = studentPhone.replace(/\D/g, '');
+        if (digits.length !== 12) {
+          errs.phone = 'Phone number must have exactly 10 digits after the country code';
+        }
+      }
+    } else if (stepNum === 2) {
+      if (!collegeId.trim()) errs.collegeId = 'College Roll Number / ID is required';
+      if (!studentBranch.trim()) errs.branch = 'Branch is required';
+      const gradYear = parseInt(studentGraduationYear);
+      const currentYearNum = new Date().getFullYear();
+      if (!studentGraduationYear || isNaN(gradYear)) {
+        errs.graduationYear = 'Graduation year is required';
+      } else if (gradYear < currentYearNum) {
+        errs.graduationYear = `Graduation year cannot be in the past (must be ${currentYearNum} or later)`;
+      }
+      const cgpaVal = parseFloat(studentCgpa);
+      if (!studentCgpa.trim() || isNaN(cgpaVal)) {
+        errs.cgpa = 'CGPA / GPA is required';
+      } else if (cgpaVal < 0 || cgpaVal > 10) {
+        errs.cgpa = 'CGPA / GPA must be between 0.0 and 10.0';
+      }
+    } else if (stepNum === 3) {
+      if (!studentLogoUrl) errs.photo = 'Profile photo is required';
+      if (!studentResumeUrl) errs.resume = 'Resume PDF is required';
+    }
+    return errs;
+  };
+
+  const handleStudentSubmit = async () => {
+    setError('');
+    if (!selectedOrgId) {
+      setError('Please select your College/Organization first.');
+      return;
+    }
+
+    const errs = validateStudentStep(3);
+    const errKeys = Object.keys(errs);
+    if (errKeys.length > 0) {
+      setError(errs[errKeys[0]]);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const regNo = collegeId.trim();
+      const { data: duplicateReg } = await insforge.database
+        .from('students')
+        .select('id')
+        .eq('college_id', regNo)
+        .maybeSingle();
+
+      if (duplicateReg) {
+        throw new Error('A student with this College ID already exists. Please contact the Admin Cell.');
+      }
+
+      const { data: signUpData, error: authErr } = await insforge.auth.signUp({
+        email: email.trim(),
+        password: password,
+        options: {
+          data: {
+            role: 'student',
+            name: studentName.trim(),
+            profile_completed: true
+          }
+        }
+      });
+
+      if (authErr) throw authErr;
+
+      localStorage.setItem('signup_organization_id', selectedOrgId);
+      localStorage.setItem('signup_role', 'student');
+      localStorage.setItem('placify_organization_id', selectedOrgId);
+      localStorage.setItem('signup_college_id', regNo);
+
+      const userId = signUpData?.user?.id;
+      if (userId) {
+        const otpCode = Math.floor(1000 + Math.random() * 9000).toString();
+
+        const educationData = {
+          personal_email: email.trim(),
+          college_email: email.trim(),
+          course: studentCourse,
+          profile_photo_url: studentLogoUrl
+        };
+
+        const { error: insertErr } = await insforge.database.from('students').insert([{
+          user_id: userId,
+          name: studentName.trim(),
+          email: email.trim(),
+          phone: studentPhone.trim() || null,
+          branch: studentBranch.trim(),
+          current_year: parseInt(studentYear),
+          graduation_year: parseInt(studentGraduationYear),
+          cgpa: parseFloat(studentCgpa) || 0,
+          backlogs: 0,
+          placement_status: 'not_placed',
+          account_status: 'Pending',
+          status: 'pending',
+          verification_status: 'Pending',
+          otp: otpCode,
+          organization_id: selectedOrgId,
+          college_id: regNo,
+          profile_photo_url: studentLogoUrl || null,
+          resume_url: studentResumeUrl || null,
+          education: educationData,
+          profile_completed: true
+        }]);
+
+        if (insertErr) throw insertErr;
+
+        await insforge.database.from('notifications').insert([{
+          user_id: '00000000-0000-0000-0000-000000000000',
+          title: 'New Student Request',
+          message: `New student registration request from ${studentName.trim()} (${email.trim()}).`,
+          type: 'info',
+          is_read: false,
+          organization_id: selectedOrgId
+        }]);
+      }
+
+      setSuccessModalRole('student');
+      setSuccessModalEmailVerif(!!signUpData?.requireEmailVerification);
+      setShowSuccessModal(true);
+    } catch (err: any) {
+      setError(err.message || 'Registration failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderStudentWizard = () => {
+    const stepsList = [
+      { num: 1, label: 'Account' },
+      { num: 2, label: 'Academic' },
+      { num: 3, label: 'Uploads' }
+    ];
+
+    const isUploading = uploadingStudentLogo || uploadingStudentResume;
+
+    return (
+      <div className="space-y-6 font-sans">
+        <div className="flex items-center justify-between border-b pb-4 border-border/60">
+          <div className="flex gap-2 items-center">
+            <GraduationCap className="w-5 h-5 text-primary" />
+            <span className="text-sm font-extrabold text-foreground font-heading">
+              Student Registration
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-muted-foreground font-medium flex items-center gap-1 bg-muted/40 px-2 py-0.5 rounded-md border border-border/30">
+              Complete profile to register
+            </span>
+          </div>
+        </div>
+
+        <div className="relative flex items-center justify-between px-2">
+          <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-muted -translate-y-1/2 z-0" />
+          <div
+            className="absolute top-1/2 left-0 h-0.5 bg-primary -translate-y-1/2 z-0 transition-all duration-300"
+            style={{ width: `${((studentStep - 1) / 2) * 100}%` }}
+          />
+          {stepsList.map(step => (
+            <button
+              key={step.num}
+              type="button"
+              disabled={step.num > studentStep}
+              onClick={() => { setError(''); setStudentStep(step.num); }}
+              className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all border ${studentStep === step.num
+                ? 'bg-primary text-primary-foreground border-primary scale-110 shadow-md shadow-primary/15'
+                : studentStep > step.num
+                  ? 'bg-background text-primary border-primary'
+                  : 'bg-muted text-muted-foreground border-border'
+                }`}
+            >
+              {step.num}
+            </button>
+          ))}
+        </div>
+
+        {studentStep === 1 && (
+          <div className="space-y-4 animate-fade-in">
+            {renderOrgSelector('signup')}
+
+            {/* Register As Role */}
+            <div className="space-y-1.5">
+              <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                Register As
+              </Label>
+              <div className="flex gap-2">
+                {['student', 'recruiter', 'organization'].map(r => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => { setIntendedRole(r as any); setError(''); }}
+                    className={`flex-1 py-2.5 text-[10px] sm:text-xs font-extrabold rounded-xl border transition-all uppercase tracking-wider ${intendedRole === r
+                      ? 'border-primary bg-primary/5 text-primary shadow-sm shadow-primary/5'
+                      : 'border-border/85 bg-background/30 text-muted-foreground hover:text-foreground'
+                      }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="studentName" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                Full Name
+              </Label>
+              <div className="relative">
+                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                <Input
+                  id="studentName"
+                  type="text"
+                  value={studentName}
+                  onChange={e => { setStudentName(e.target.value); setError(''); }}
+                  placeholder="Enter your full name"
+                  className="pl-10 h-11 rounded-xl border-border/80 bg-background/30 font-sans text-sm"
+                  required
+                />
+              </div>
+            </div>
+
+             <div className="space-y-1.5">
+              <Label htmlFor="studentPhone" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                Phone Number *
+              </Label>
+              <div className="relative">
+                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                <Input
+                  id="studentPhone"
+                  type="tel"
+                  value={studentPhone}
+                  onChange={e => {
+                    let val = e.target.value;
+                    // strip any character that is not a digit, space or +
+                    val = val.replace(/[^0-9+\s]/g, '');
+                    if (val && !val.startsWith('+')) {
+                      if (/^\d/.test(val)) {
+                        val = '+91 ' + val;
+                      }
+                    }
+                    if (val.startsWith('+91')) {
+                      const prefixPart = val.startsWith('+91 ') ? '+91 ' : '+91';
+                      const suffix = val.substring(prefixPart.length);
+                      const digitsOnly = suffix.replace(/\D/g, '');
+                      if (digitsOnly.length > 10) {
+                        val = prefixPart + digitsOnly.substring(0, 10);
+                      }
+                    }
+                    setStudentPhone(val);
+                    setError('');
+                  }}
+                  placeholder="+91 9876543210"
+                  className="pl-10 h-11 rounded-xl border-border/80 bg-background/30 font-sans text-sm"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                Personal Email
+              </Label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={e => { setEmail(e.target.value); setError(''); }}
+                  placeholder="yourname@gmail.com"
+                  className="pl-10 h-11 rounded-xl border-border/80 bg-background/30 font-sans text-sm"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="password" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                Password
+              </Label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                <Input
+                  id="password"
+                  type={showPass ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); setError(''); }}
+                  placeholder="Minimum 6 characters"
+                  className="pl-10 pr-10 h-11 rounded-xl border-border/80 bg-background/30 font-sans text-sm"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground transition-colors"
+                >
+                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {studentStep === 2 && (
+          <div className="space-y-4 animate-fade-in">
+            <div className="space-y-1.5">
+              <Label htmlFor="collegeId" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                College Roll No / Student ID
+              </Label>
+              <div className="relative">
+                <GraduationCap className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                <Input
+                  id="collegeId"
+                  type="text"
+                  value={collegeId}
+                  onChange={e => { setCollegeId(e.target.value); setError(''); }}
+                  placeholder="Enter your College Roll No / ID"
+                  className="pl-10 h-11 rounded-xl border-border/80 bg-background/30 font-sans text-sm"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3.5">
+              <div className="space-y-1.5">
+                <Label htmlFor="studentCourse" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                  Course
+                </Label>
+                <Select value={studentCourse} onValueChange={setStudentCourse}>
+                  <SelectTrigger className="h-11 rounded-xl border-border/80 bg-background/30 text-sm focus:ring-primary/20">
+                    <SelectValue placeholder="Select Course" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    {['B.Tech', 'M.Tech', 'BCA', 'MCA', 'BBA', 'MBA', 'B.Sc', 'M.Sc'].map(c => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="studentBranch" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                  Branch
+                </Label>
+                <Input
+                  id="studentBranch"
+                  type="text"
+                  value={studentBranch}
+                  onChange={e => setStudentBranch(e.target.value)}
+                  placeholder="e.g. CSE, ECE"
+                  className="h-11 rounded-xl border-border/80 bg-background/30 text-sm"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3.5">
+              <div className="space-y-1.5">
+                <Label htmlFor="studentYear" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                  Current Year
+                </Label>
+                <Select value={studentYear} onValueChange={setStudentYear}>
+                  <SelectTrigger className="h-11 rounded-xl border-border/80 bg-background/30 text-sm focus:ring-primary/20">
+                    <SelectValue placeholder="Select Year" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    {['1', '2', '3', '4'].map(y => (
+                      <SelectItem key={y} value={y}>Year {y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="studentGraduationYear" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                  Graduation Year
+                </Label>
+                <Input
+                  id="studentGraduationYear"
+                  type="number"
+                  value={studentGraduationYear}
+                  onChange={e => setStudentGraduationYear(e.target.value)}
+                  placeholder="Graduation Year"
+                  className="h-11 rounded-xl border-border/80 bg-background/30 text-sm"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="studentCgpa" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                CGPA / GPA *
+              </Label>
+              <Input
+                id="studentCgpa"
+                type="text"
+                value={studentCgpa}
+                onChange={e => {
+                  let val = e.target.value;
+                  val = val.replace(/[^0-9.]/g, '');
+                  const parts = val.split('.');
+                  if (parts.length > 2) {
+                    val = parts[0] + '.' + parts.slice(1).join('');
+                  }
+                  setStudentCgpa(val);
+                  setError('');
+                }}
+                placeholder="e.g. 8.5"
+                className="h-11 rounded-xl border-border/80 bg-background/30 text-sm"
+                required
+              />
+            </div>
+          </div>
+        )}
+
+        {studentStep === 3 && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="space-y-2">
+              <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                Profile Photo *
+              </Label>
+              <div className="flex items-center gap-4 p-4 border border-border/80 rounded-xl bg-background/25">
+                <Avatar className="w-14 h-14 border border-border">
+                  <AvatarImage src={studentLogoUrl} className="object-cover w-full h-full" />
+                  <AvatarFallback className="bg-primary/10 text-primary text-lg font-bold">
+                    {studentName?.charAt(0) || 'S'}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <input
+                    type="file"
+                    id="student-photo-file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleStudentFileUpload('photo', file);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={uploadingStudentLogo}
+                    onClick={() => document.getElementById('student-photo-file')?.click()}
+                    className="h-9 px-4 text-xs font-bold border-border/80"
+                  >
+                    {uploadingStudentLogo ? (
+                      <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Uploading...</>
+                    ) : (
+                      'Upload Photo'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">
+                Resume PDF *
+              </Label>
+              <div className="p-5 border border-dashed border-border/90 rounded-xl bg-background/20 text-center relative font-sans">
+                <input
+                  type="file"
+                  id="student-resume-file"
+                  className="hidden"
+                  accept="application/pdf"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleStudentFileUpload('resume', file);
+                  }}
+                />
+                {studentResumeUrl ? (
+                  <div className="space-y-2">
+                    <FileText className="w-8 h-8 text-primary mx-auto" />
+                    <p className="text-xs text-foreground font-semibold">Resume uploaded successfully!</p>
+                    <a
+                      href={studentResumeUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] font-bold text-indigo-400 hover:underline block"
+                    >
+                      View Uploaded Resume
+                    </a>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => document.getElementById('student-resume-file')?.click()}
+                      className="h-8 text-[10px] font-bold text-muted-foreground hover:text-foreground mt-2"
+                    >
+                      Change File
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <Upload className="w-8 h-8 text-muted-foreground/60 mx-auto" />
+                    <div className="space-y-1">
+                      <p className="text-xs text-foreground/80 font-medium">Upload your academic Resume / CV</p>
+                      <p className="text-[10px] text-muted-foreground">Only PDF files up to 5MB are supported</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={uploadingStudentResume}
+                      onClick={() => document.getElementById('student-resume-file')?.click()}
+                      className="h-9 px-4 text-xs font-bold border-border/80"
+                    >
+                      {uploadingStudentResume ? (
+                        <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Uploading...</>
+                      ) : (
+                        'Select Resume PDF'
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-between gap-3 border-t border-border/40 pt-4 mt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setError('');
+              if (studentStep > 1) {
+                setStudentStep(prev => prev - 1);
+              } else {
+                setMode('signin');
+              }
+            }}
+            className="h-10 px-4 text-xs font-bold border-border/85"
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" />
+            Back
+          </Button>
+
+          {studentStep < 3 ? (
+            <Button
+              type="button"
+              onClick={() => {
+                setError('');
+                const errs = validateStudentStep(studentStep);
+                const errKeys = Object.keys(errs);
+                if (errKeys.length > 0) {
+                  setError(errs[errKeys[0]]);
+                  return;
+                }
+                setStudentStep(prev => prev + 1);
+              }}
+              className="h-10 px-5 text-xs font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20"
+            >
+              Next
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              onClick={handleStudentSubmit}
               disabled={loading || isUploading}
               className="h-10 px-6 text-xs font-extrabold shadow-md shadow-primary/15 hover:shadow-lg hover:shadow-primary/25 bg-emerald-600 hover:bg-emerald-700 text-white"
             >
@@ -2500,6 +3205,8 @@ export default function AuthPage() {
               renderOrganizationWizard()
             ) : mode === 'signup' && intendedRole === 'recruiter' ? (
               renderRecruiterWizard()
+            ) : mode === 'signup' && intendedRole === 'student' ? (
+              renderStudentWizard()
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 {mode === 'verify' ? (
