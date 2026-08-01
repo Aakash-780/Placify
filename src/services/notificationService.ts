@@ -80,17 +80,39 @@ export const NotificationService = {
         return { data: null, error: new Error('Invalid status for notification mapping') };
     },
 
+    async getOrgIdForAdmin(userId: string): Promise<string | null> {
+        try {
+            const { data } = await insforge.database
+                .from('admins')
+                .select('organization_id')
+                .eq('id', userId)
+                .maybeSingle();
+            return data?.organization_id || null;
+        } catch (err) {
+            console.error('[NotificationService] Error fetching admin org ID:', err);
+            return null;
+        }
+    },
+
     async getNotifications(userId: string, params: { page?: number; limit?: number; type?: string; isRead?: boolean } = {}) {
         try {
             const page = params.page || 1;
             const limit = params.limit || 10;
             const offset = (page - 1) * limit;
 
+            const userOrgId = await this.getOrgIdForAdmin(userId);
+
             let query = insforge.database
                 .from('notifications')
-                .select('*', { count: 'exact' })
-                .eq('user_id', userId)
-                .order('created_at', { ascending: false });
+                .select('*', { count: 'exact' });
+
+            if (userOrgId) {
+                query = query.or(`user_id.eq.${userId},and(user_id.eq.00000000-0000-0000-0000-000000000000,organization_id.eq.${userOrgId})`);
+            } else {
+                query = query.eq('user_id', userId);
+            }
+
+            query = query.order('created_at', { ascending: false });
 
             if (params.type && params.type !== 'all') {
                 if (params.type === 'job_application') {
@@ -124,11 +146,19 @@ export const NotificationService = {
 
     async getUnreadCount(userId: string) {
         try {
-            const { data, error, count } = await insforge.database
+            const userOrgId = await this.getOrgIdForAdmin(userId);
+
+            let query = insforge.database
                 .from('notifications')
-                .select('*', { count: 'exact', head: true })
-                .eq('user_id', userId)
-                .eq('is_read', false);
+                .select('*', { count: 'exact', head: true });
+
+            if (userOrgId) {
+                query = query.or(`user_id.eq.${userId},and(user_id.eq.00000000-0000-0000-0000-000000000000,organization_id.eq.${userOrgId})`);
+            } else {
+                query = query.eq('user_id', userId);
+            }
+
+            const { data, error, count } = await query.eq('is_read', false);
 
             if (error) throw error;
             return { count: count || 0, error: null };
@@ -155,11 +185,19 @@ export const NotificationService = {
 
     async markAllAsRead(userId: string) {
         try {
-            const { data, error } = await insforge.database
+            const userOrgId = await this.getOrgIdForAdmin(userId);
+
+            let query = insforge.database
                 .from('notifications')
-                .update({ is_read: true })
-                .eq('user_id', userId)
-                .eq('is_read', false);
+                .update({ is_read: true });
+
+            if (userOrgId) {
+                query = query.or(`user_id.eq.${userId},and(user_id.eq.00000000-0000-0000-0000-000000000000,organization_id.eq.${userOrgId})`);
+            } else {
+                query = query.eq('user_id', userId);
+            }
+
+            const { data, error } = await query.eq('is_read', false);
 
             if (error) throw error;
             return { data, error: null };

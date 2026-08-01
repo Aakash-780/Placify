@@ -34,7 +34,7 @@ export default function Recruiters() {
             const { data: recData } = await insforge.database
                 .from('recruiters')
                 .select('*')
-                .eq('verification_status', 'Verified')
+                .in('verification_status', ['Verified', 'Suspended'])
                 .order('name');
             setRecruiters(recData || []);
 

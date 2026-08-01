@@ -102,23 +102,27 @@ export default function RoleSelection() {
     }
 
     const handleNextStep = () => {
-        const errs = validateStep(studentStep);
+        const currentStep = studentStep;
+        const errs = validateStep(currentStep);
         setErrors(errs);
         
         // Mark all fields in current step as touched
-        if (studentStep === 1) {
-            setTouched({ name: true, phone: true, personalEmail: true });
-        } else if (studentStep === 2) {
-            setTouched({ registrationNumber: true, collegeEmail: true });
-        }
-
-        if (Object.keys(errs).length === 0) {
-            setStudentStep(prev => prev + 1);
+        if (signupRole === 'student') {
+            if (studentStep === 1) {
+                setTouched({ name: true, phone: true, personalEmail: true });
+            } else if (studentStep === 2) {
+                setTouched({ registrationNumber: true, collegeEmail: true });
+            }
+            if (Object.keys(errs).length === 0) {
+                setStudentStep(prev => prev + 1);
+            }
         }
     };
 
     const handlePrevStep = () => {
-        setStudentStep(prev => prev - 1);
+        if (signupRole === 'student') {
+            setStudentStep(prev => prev - 1);
+        }
     };
 
     // Upload files handler
@@ -739,14 +743,14 @@ export default function RoleSelection() {
                             </CardContent>
                         </Card>
                     ) : (
-                        <Card className="border border-border/80 bg-card/75 backdrop-blur-xl shadow-xl hover:shadow-2xl hover:border-primary/20 transition-all duration-300 rounded-2xl overflow-hidden">
+                        <Card className="border border-border/80 bg-card/75 backdrop-blur-xl shadow-xl hover:shadow-2xl hover:border-primary/20 transition-all duration-300 rounded-2xl overflow-hidden animate-scale-in">
                             <div className="absolute top-0 inset-x-0 h-[3px] bg-gradient-to-r from-primary to-accent" />
                             <CardHeader>
                                 <CardTitle>Your Details</CardTitle>
                                 <CardDescription>Fill in your information to create your Recruiter account</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div>
+                                <div className="space-y-1">
                                     <Label>Full Name *</Label>
                                     <Input
                                         value={name}
@@ -754,7 +758,7 @@ export default function RoleSelection() {
                                         placeholder="John Doe"
                                     />
                                 </div>
-                                <div>
+                                <div className="space-y-1">
                                     <Label>Company Name *</Label>
                                     <Input
                                         value={company}

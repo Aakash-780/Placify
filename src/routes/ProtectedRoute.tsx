@@ -27,6 +27,20 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
     // Suspended check (applies to organization users, not the Platform Owner)
     if (accountStatus === 'Suspended' && role !== 'PLATFORM_OWNER') {
+        const isRecruiterSuspended = role === 'recruiter';
+        const isStudentSuspended = role === 'student';
+        
+        let headingText = "Access Denied";
+        let messageText = "This organization has been suspended by Placify.";
+        
+        if (isRecruiterSuspended) {
+            headingText = "Account Suspended";
+            messageText = "You were suspended from this organization. Please contact the Organization Admin for details.";
+        } else if (isStudentSuspended) {
+            headingText = "Account Suspended";
+            messageText = "Your student account has been suspended by the placement cell.";
+        }
+
         return (
             <div className="min-h-screen flex items-center justify-center p-4 bg-[#030712] text-white font-body select-none">
                 <div className="max-w-md w-full border border-slate-800 bg-slate-900/60 backdrop-blur-xl p-8 rounded-2xl text-center space-y-6">
@@ -36,9 +50,9 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
                         </svg>
                     </div>
                     <div className="space-y-2">
-                        <h1 className="text-2xl font-heading font-extrabold text-white">Access Denied</h1>
+                        <h1 className="text-2xl font-heading font-extrabold text-white">{headingText}</h1>
                         <p className="text-sm text-slate-400 leading-relaxed">
-                            This organization has been suspended by Placify.
+                            {messageText}
                         </p>
                     </div>
                     <button

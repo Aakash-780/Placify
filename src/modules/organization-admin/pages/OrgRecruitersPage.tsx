@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRole } from '@/context/RoleContext';
 import { insforge } from '@/lib/insforge';
-import { 
-  Building2, Search, FileText, Loader2, RefreshCw, Calendar, Globe, MapPin, ExternalLink, Mail, ChevronLeft, ChevronRight
+import {
+  Building2, Search, FileText, Loader2, RefreshCw, Calendar, Globe, MapPin, ExternalLink, Mail, ChevronLeft, ChevronRight, X, Key, Check, MoreVertical
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import SubadminFeatureToggle from '@/components/SubadminFeatureToggle';
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem
+} from '@/components/ui/dropdown-menu';
 
 type PageTabType = 'verification' | 'partners';
 
@@ -34,10 +37,43 @@ export default function OrgRecruitersPage() {
 
   // Modals state
   const [showRecruiterDetails, setShowRecruiterDetails] = useState<any | null>(null);
+  const [showResetPass, setShowResetPass] = useState<any | null>(null);
+  const [resetPassVal, setResetPassVal] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState<{ email: string; pass: string } | null>(null);
 
   function triggerToast(message: string, type: 'success' | 'error' | 'info' = 'success') {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
+  }
+
+  function generatePassword() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#%';
+    let pass = '';
+    for (let i = 0; i < 10; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return pass;
+  }
+
+  async function handleResetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!showResetPass || !resetPassVal.trim()) return;
+    setResetLoading(true);
+    try {
+      const { error } = await insforge.database.rpc('reset_user_password', {
+        user_email: showResetPass.email,
+        new_password: resetPassVal.trim()
+      });
+
+      if (error) throw error;
+      setResetSuccess({ email: showResetPass.email, pass: resetPassVal.trim() });
+      triggerToast('Password updated successfully.');
+    } catch (err: any) {
+      triggerToast(err.message || 'Password reset failed.', 'error');
+    } finally {
+      setResetLoading(false);
+    }
   }
 
   const loadData = async () => {
@@ -87,19 +123,27 @@ export default function OrgRecruitersPage() {
   };
 
   // Verification actions for recruiter
-  async function handleRecruiterVerify(recruiter: any, status: 'Verified' | 'Rejected' | 'Suspended') {
+  async function handleRecruiterVerify(recruiter: any, statusVal: 'Verified' | 'Rejected' | 'Suspended') {
     try {
+      const updatePayload: any = {
+        verification_status: statusVal,
+        verified_by: roleData?.id,
+        verified_at: new Date().toISOString()
+      };
+
+      if (statusVal === 'Verified') {
+        updatePayload.status = 'Active';
+      } else {
+        updatePayload.status = 'Suspended';
+      }
+
       const { error } = await insforge.database
         .from('recruiters')
-        .update({ 
-          verification_status: status,
-          verified_by: roleData.id,
-          verified_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq('id', recruiter.id);
 
       if (error) throw error;
-      triggerToast(`Recruiter '${recruiter.name}' is now marked as ${status}.`);
+      triggerToast(`Recruiter '${recruiter.name}' is now marked as ${statusVal}.`);
       loadData();
     } catch (err: any) {
       triggerToast(err.message || 'Action failed.', 'error');
@@ -270,12 +314,12 @@ export default function OrgRecruitersPage() {
               {activeTab === 'verification' ? (
                 <div>
                   <div className="flex border-b border-border bg-card/80 p-4 font-bold uppercase tracking-wider text-foreground text-xs">
-                    <div className="w-1/5">Company</div>
-                    <div className="w-1/5">Recruiter Name</div>
-                    <div className="w-1/5">Email Address</div>
-                    <div className="w-1/5">Validation Doc</div>
-                    <div className="w-1/5 text-center">Status</div>
-                    <div className="w-1/5 text-center">Actions</div>
+                    <div className="w-[18%]">Company</div>
+                    <div className="w-[18%]">Recruiter Name</div>
+                    <div className="w-[22%]">Email Address</div>
+                    <div className="w-[18%]">Validation Doc</div>
+                    <div className="w-[12%] text-center">Status</div>
+                    <div className="w-[12%] text-center">Actions</div>
                   </div>
 
                   {paginatedRecruiters.length === 0 ? (
@@ -290,10 +334,10 @@ export default function OrgRecruitersPage() {
                             className="flex p-4 items-center hover:bg-card/40 transition-colors text-sm cursor-pointer"
                             onClick={() => setShowRecruiterDetails(rec)}
                           >
-                            <div className="w-1/5 font-bold text-foreground">{comp.name}</div>
-                            <div className="w-1/5 text-foreground">{rec.name}</div>
-                            <div className="w-1/5 font-mono text-foreground/80 text-xs">{rec.email}</div>
-                            <div className="w-1/5">
+                            <div className="w-[18%] font-bold text-foreground truncate pr-2">{comp.name}</div>
+                            <div className="w-[18%] text-foreground truncate pr-2">{rec.name}</div>
+                            <div className="w-[22%] font-mono text-foreground/80 text-xs truncate pr-2">{rec.email}</div>
+                            <div className="w-[18%] truncate pr-2">
                               {comp.verificationDoc ? (
                                 <a 
                                   href={comp.verificationDoc} 
@@ -309,7 +353,7 @@ export default function OrgRecruitersPage() {
                                 <span className="text-muted-foreground">No Document</span>
                               )}
                             </div>
-                            <div className="w-1/5 flex justify-center">
+                            <div className="w-[12%] flex justify-center">
                               <Badge variant={
                                 rec.verification_status === 'Verified' ? 'default' : 
                                 rec.verification_status === 'Pending' ? 'secondary' : 'destructive'
@@ -317,47 +361,53 @@ export default function OrgRecruitersPage() {
                                 {rec.verification_status}
                               </Badge>
                             </div>
-                            <div className="w-1/5 flex justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                              {rec.verification_status !== 'Verified' && (
-                                <Button
-                                  size="sm"
-                                  className="h-7 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-foreground"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRecruiterVerify(rec, 'Verified');
-                                  }}
-                                >
-                                  Verify
-                                </Button>
-                              )}
-
-                              {rec.verification_status === 'Pending' && (
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  className="h-7 text-[10px] font-bold"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRecruiterVerify(rec, 'Rejected');
-                                  }}
-                                >
-                                  Reject
-                                </Button>
-                              )}
-
-                              {rec.verification_status === 'Verified' && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 text-[10px] font-bold text-red-400 hover:text-red-300"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRecruiterVerify(rec, 'Suspended');
-                                  }}
-                                >
-                                  Suspend
-                                </Button>
-                              )}
+                            <div className="w-[12%] flex justify-center" onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-card/60 rounded-lg">
+                                    <span className="sr-only">Open menu</span>
+                                    <MoreVertical className="h-4 w-4 text-foreground/70" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="bg-card border border-border shadow-xl text-xs min-w-[120px]">
+                                  {rec.verification_status !== 'Verified' && (
+                                    <DropdownMenuItem 
+                                      className="text-emerald-500 hover:text-emerald-400 focus:bg-emerald-500/10 cursor-pointer font-semibold py-1.5"
+                                      onClick={() => handleRecruiterVerify(rec, 'Verified')}
+                                    >
+                                      Verify
+                                    </DropdownMenuItem>
+                                  )}
+                                  {rec.verification_status === 'Pending' && (
+                                    <DropdownMenuItem 
+                                      className="text-red-500 hover:text-red-400 focus:bg-red-500/10 cursor-pointer font-semibold py-1.5"
+                                      onClick={() => handleRecruiterVerify(rec, 'Rejected')}
+                                    >
+                                      Reject
+                                    </DropdownMenuItem>
+                                  )}
+                                  {rec.verification_status === 'Verified' && (
+                                    <>
+                                      <DropdownMenuItem 
+                                        className="text-purple-400 hover:text-purple-300 focus:bg-purple-500/10 cursor-pointer font-semibold py-1.5"
+                                        onClick={() => {
+                                          setResetPassVal(generatePassword());
+                                          setResetSuccess(null);
+                                          setShowResetPass(rec);
+                                        }}
+                                      >
+                                        Reset Password
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem 
+                                        className="text-red-500 hover:text-red-400 focus:bg-red-500/10 cursor-pointer font-semibold py-1.5"
+                                        onClick={() => handleRecruiterVerify(rec, 'Suspended')}
+                                      >
+                                        Suspend
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </div>
                         );
@@ -388,29 +438,39 @@ export default function OrgRecruitersPage() {
                             {rec.status}
                           </Badge>
                         </div>
-                        <div className="w-1/4 flex justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 text-[10px] font-bold text-yellow-400"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleUserActiveStatus(rec);
-                            }}
-                          >
-                            {rec.status === 'Active' || rec.status === 'Verified' ? 'Disable' : 'Enable'}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 text-[10px] font-bold text-red-500"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteUserAccount(rec);
-                            }}
-                          >
-                            Delete
-                          </Button>
+                        <div className="w-1/4 flex justify-center" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-card/60 rounded-lg">
+                                <span className="sr-only">Open menu</span>
+                                <MoreVertical className="h-4 w-4 text-foreground/70" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="bg-card border border-border shadow-xl text-xs min-w-[120px]">
+                              <DropdownMenuItem 
+                                className="text-purple-400 hover:text-purple-350 focus:bg-purple-500/10 cursor-pointer font-semibold py-1.5"
+                                onClick={() => {
+                                  setResetPassVal(generatePassword());
+                                  setResetSuccess(null);
+                                  setShowResetPass(rec);
+                                }}
+                              >
+                                Reset Password
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                className="text-yellow-450 hover:text-yellow-400 focus:bg-yellow-500/10 cursor-pointer font-semibold py-1.5"
+                                onClick={() => toggleUserActiveStatus(rec)}
+                              >
+                                {rec.status === 'Active' || rec.status === 'Verified' ? 'Disable' : 'Enable'}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                className="text-red-500 hover:text-red-400 focus:bg-red-500/10 cursor-pointer font-semibold py-1.5"
+                                onClick={() => handleDeleteUserAccount(rec)}
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </div>
                     );
@@ -538,6 +598,71 @@ export default function OrgRecruitersPage() {
           </Dialog>
         );
       })()}
+
+      {/* MODAL: RESET PASSWORD */}
+      {showResetPass && (
+        <Dialog open={!!showResetPass} onOpenChange={() => { setShowResetPass(null); setResetSuccess(null); }}>
+          <DialogContent className="max-w-md bg-card border border-border shadow-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-white text-base font-bold">Reset Password</DialogTitle>
+            </DialogHeader>
+
+            {resetSuccess ? (
+              <div className="space-y-4 text-center py-2 animate-scale-in">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto">
+                  <Check className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-foreground">Credentials Reset Successfully</h4>
+                  <p className="text-xs text-muted-foreground mt-1">Please copy the temporary login password below.</p>
+                </div>
+                <div className="p-3.5 bg-card border border-border rounded-xl space-y-2 text-xs text-left font-mono">
+                  <div>Email: <span className="text-white select-all">{resetSuccess.email}</span></div>
+                  <div>Password: <span className="text-white select-all">{resetSuccess.pass}</span></div>
+                </div>
+                <Button onClick={() => { setShowResetPass(null); setResetSuccess(null); }} className="w-full bg-indigo-600 text-foreground font-bold">
+                  Close Panel
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleResetPassword} className="space-y-4 pt-2">
+                <p className="text-xs text-foreground/80 leading-relaxed">
+                  Reset temporary security password for recruiter:<br />
+                  <strong className="text-white font-mono">{showResetPass.name} ({showResetPass.email})</strong>
+                </p>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold uppercase tracking-wider text-foreground/80">New Password</label>
+                    <button 
+                      type="button" 
+                      onClick={() => setResetPassVal(generatePassword())}
+                      className="text-[10px] font-bold text-indigo-400 hover:underline"
+                    >
+                      Generate password
+                    </button>
+                  </div>
+                  <Input
+                    required
+                    value={resetPassVal}
+                    onChange={e => setResetPassVal(e.target.value)}
+                    className="bg-card border-border text-xs font-mono text-foreground"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2.5 pt-4 border-t border-border">
+                  <Button type="button" variant="outline" onClick={() => setShowResetPass(null)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={resetLoading} className="bg-indigo-600 hover:bg-indigo-500 text-foreground font-bold">
+                    {resetLoading ? 'Resetting password...' : 'Confirm Reset'}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

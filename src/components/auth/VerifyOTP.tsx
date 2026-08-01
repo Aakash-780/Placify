@@ -280,7 +280,7 @@ export default function VerifyOTP() {
                         <p className="text-sm text-muted-foreground mt-2 max-w-sm mx-auto leading-relaxed">
                             {role === 'student' 
                                 ? 'Your profile has been submitted and is currently under review by your college coordinators.'
-                                : 'Your recruiter application has been submitted to the Super Admin.'}
+                                : 'Your recruiter application has been submitted to the Organization Admin.'}
                         </p>
                     </div>
 

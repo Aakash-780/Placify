@@ -97,6 +97,24 @@ export default function AuthPage() {
   const [isEditingResubmission, setIsEditingResubmission] = useState(false);
   const [resubmitRequestId, setResubmitRequestId] = useState('');
 
+  // Recruiter Setup States (in registration starting flow)
+  const [recCompanyName, setRecCompanyName] = useState('');
+  const [recLogoUrl, setRecLogoUrl] = useState('');
+  const [recIndustry, setRecIndustry] = useState('');
+  const [recDescription, setRecDescription] = useState('');
+  const [recWebsite, setRecWebsite] = useState('');
+  const [recCompanyEmail, setRecCompanyEmail] = useState('');
+  const [recDesignation, setRecDesignation] = useState('');
+  const [recCompanySize, setRecCompanySize] = useState('11-50 employees');
+  const [recHeadquarters, setRecHeadquarters] = useState('');
+  const [recLinkedin, setRecLinkedin] = useState('');
+  const [recVerificationDoc, setRecVerificationDoc] = useState('');
+  const [recStep, setRecStep] = useState(1);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [recName, setRecName] = useState('');
+  const [recConfirmPassword, setRecConfirmPassword] = useState('');
+
   // Registration Success Modal
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successModalRole, setSuccessModalRole] = useState<RegistrationRole>('generic');
@@ -219,11 +237,6 @@ export default function AuthPage() {
 
   // Hashing and domain validation helpers
   const validatePassword = (pass: string) => {
-    if (pass.length < 8) return "Password must be at least 8 characters long.";
-    if (!/[A-Z]/.test(pass)) return "Password must contain at least one uppercase letter.";
-    if (!/[a-z]/.test(pass)) return "Password must contain at least one lowercase letter.";
-    if (!/[0-9]/.test(pass)) return "Password must contain at least one number.";
-    if (!/[!@#$%^&*(),.?\":{}|<>]/.test(pass)) return "Password must contain at least one special character.";
     return null;
   };
 
@@ -299,6 +312,171 @@ export default function AuthPage() {
       }
     }
     setGeneratedCode(code);
+  };
+
+  const handleRecruiterLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingLogo(true);
+    setError('');
+    try {
+      const storagePath = `recruiter-branding/logo_${Date.now()}_${file.name}`;
+      const { data, error } = await insforge.storage.from('profile-images').upload(storagePath, file);
+      if (error) throw error;
+      const urlResult = insforge.storage.from('profile-images').getPublicUrl(storagePath);
+      const fileUrl = urlResult.data?.publicUrl || urlResult.publicUrl || urlResult.data?.url || String(urlResult);
+      setRecLogoUrl(fileUrl);
+    } catch (err: any) {
+      setError('Failed to upload logo: ' + (err.message || err));
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleRecruiterDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingDoc(true);
+    setError('');
+    try {
+      const storagePath = `recruiter-branding/doc_${Date.now()}_${file.name}`;
+      const { data, error } = await insforge.storage.from('profile-images').upload(storagePath, file);
+      if (error) throw error;
+      const urlResult = insforge.storage.from('profile-images').getPublicUrl(storagePath);
+      const fileUrl = urlResult.data?.publicUrl || urlResult.publicUrl || urlResult.data?.url || String(urlResult);
+      setRecVerificationDoc(fileUrl);
+    } catch (err: any) {
+      setError('Failed to upload document: ' + (err.message || err));
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const validateRecruiterStep = (stepNum: number) => {
+    const errs: Record<string, string> = {};
+    if (stepNum === 1) {
+      if (!selectedOrgId) errs.org = 'Please select an Organization.';
+      if (!recCompanyName.trim()) errs.companyName = 'Company name is required';
+      if (!recWebsite.trim()) {
+        errs.website = 'Company website is required';
+      } else if (!/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/.test(recWebsite)) {
+        errs.website = 'Enter a valid URL (e.g. https://stripe.com)';
+      }
+      if (!recCompanyEmail.trim()) {
+        errs.companyEmail = 'Company email is required';
+      } else if (!/\S+@\S+\.\S+/.test(recCompanyEmail)) {
+        errs.companyEmail = 'Enter a valid company email';
+      }
+    } else if (stepNum === 2) {
+      if (!recIndustry) errs.industry = 'Industry is required';
+      if (!recCompanySize) errs.companySize = 'Company size is required';
+      if (!recHeadquarters.trim()) errs.headquarters = 'Headquarters location is required';
+      if (!recDescription.trim()) errs.description = 'Company description is required';
+    } else if (stepNum === 3) {
+      if (!recName.trim()) errs.name = 'Recruiter name is required';
+      if (!recDesignation.trim()) errs.designation = 'Recruiter designation is required';
+      if (!recLinkedin.trim()) {
+        errs.linkedin = 'LinkedIn profile is required';
+      } else if (!/^(https?:\/\/)?(www\.)?linkedin\.com\/.*$/.test(recLinkedin)) {
+        errs.linkedin = 'Enter a valid LinkedIn URL';
+      }
+      if (!email.trim()) {
+        errs.email = 'Personal email address is required';
+      } else if (!/\S+@\S+\.\S+/.test(email)) {
+        errs.email = 'Enter a valid email address';
+      }
+      const passErr = validatePassword(password);
+      if (passErr) {
+        errs.password = passErr;
+      }
+      if (password !== recConfirmPassword) {
+        errs.confirmPassword = 'Passwords do not match';
+      }
+    }
+    return errs;
+  };
+
+  const handleRecruiterSubmit = async () => {
+    setError('');
+    setSuccessMsg('');
+
+    const errs = validateRecruiterStep(3);
+    const errKeys = Object.keys(errs);
+    if (errKeys.length > 0) {
+      setError(errs[errKeys[0]]);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // 1. Call InsForge Auth signUp
+      const { data: signUpData, error: err } = await insforge.auth.signUp({ email: email.trim(), password });
+      if (err?.message) throw err;
+
+      // 2. Cache details in localStorage
+      localStorage.setItem('signup_organization_id', selectedOrgId);
+      localStorage.setItem('signup_role', 'recruiter');
+      localStorage.setItem('placify_organization_id', selectedOrgId);
+      localStorage.removeItem('signup_college_id');
+
+      // 3. Create completed database record immediately with status 'Active' and verification_status 'Pending'
+      const userId = signUpData?.user?.id;
+      if (userId) {
+        const otpCode = Math.floor(1000 + Math.random() * 9000).toString();
+        const companyDetails = JSON.stringify({
+          companyName: recCompanyName.trim(),
+          logoUrl: recLogoUrl,
+          industry: recIndustry,
+          description: recDescription.trim(),
+          website: recWebsite.trim(),
+          companyEmail: recCompanyEmail.trim(),
+          recruiterName: recName.trim(),
+          recruiterDesignation: recDesignation.trim(),
+          companySize: recCompanySize,
+          headquarters: recHeadquarters.trim(),
+          linkedin: recLinkedin.trim(),
+          verificationDoc: recVerificationDoc
+        });
+
+        const { error: insertErr } = await insforge.database.from('recruiters').insert([{
+          user_id: userId,
+          name: recName.trim(),
+          email: email.trim(),
+          company: companyDetails,
+          profile_photo_url: recLogoUrl,
+          status: 'Active', // Active status allows single-time Org Admin verification to verify account
+          verification_status: 'Pending',
+          otp: otpCode,
+          organization_id: selectedOrgId,
+          profile_completed: true // Bypass RoleSelection.tsx onboarding steps
+        }]);
+        if (insertErr) throw insertErr;
+
+        // Create notification for Org Admin
+        await insforge.database.from('notifications').insert([{
+          user_id: '00000000-0000-0000-0000-000000000000',
+          title: 'New Recruiter Request',
+          message: `New recruiter registration request from ${recName.trim()} (${email.trim()}) for ${recCompanyName.trim()}.`,
+          type: 'info',
+          is_read: false,
+          organization_id: selectedOrgId
+        }]);
+      }
+
+      if (signUpData?.requireEmailVerification) {
+        setSuccessModalRole('recruiter');
+        setSuccessModalEmailVerif(true);
+        setShowSuccessModal(true);
+      } else {
+        setSuccessModalRole('recruiter');
+        setSuccessModalEmailVerif(false);
+        setShowSuccessModal(true);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Registration failed.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleFileUpload = async (field: string, bucket: string, file: File) => {
@@ -1741,6 +1919,406 @@ export default function AuthPage() {
     );
   };
 
+  const renderRecruiterWizard = () => {
+    const stepsList = [
+      { num: 1, label: 'Brand' },
+      { num: 2, label: 'Company' },
+      { num: 3, label: 'Recruiter' }
+    ];
+
+    const isUploading = uploadingLogo || uploadingDoc;
+
+    return (
+      <div className="space-y-6 font-sans">
+        {/* Step Indicator Header */}
+        <div className="flex items-center justify-between border-b pb-4 border-border/60">
+          <div className="flex gap-2 items-center">
+            <Building className="w-5 h-5 text-primary" />
+            <span className="text-sm font-extrabold text-foreground font-heading">
+              Recruiter Registration
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-muted-foreground font-medium flex items-center gap-1 bg-muted/40 px-2 py-0.5 rounded-md border border-border/30">
+              Complete profile to register
+            </span>
+          </div>
+        </div>
+
+        {/* Stepper */}
+        <div className="relative flex items-center justify-between px-2">
+          <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-muted -translate-y-1/2 z-0" />
+          <div
+            className="absolute top-1/2 left-0 h-0.5 bg-primary -translate-y-1/2 z-0 transition-all duration-300"
+            style={{ width: `${((recStep - 1) / 2) * 100}%` }}
+          />
+          {stepsList.map(step => (
+            <button
+              key={step.num}
+              type="button"
+              disabled={step.num > recStep}
+              onClick={() => { setError(''); setRecStep(step.num); }}
+              className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all border ${recStep === step.num
+                ? 'bg-primary text-primary-foreground border-primary scale-110 shadow-md shadow-primary/15'
+                : recStep > step.num
+                  ? 'bg-background text-primary border-primary'
+                  : 'bg-muted text-muted-foreground border-border'
+                }`}
+            >
+              {step.num}
+            </button>
+          ))}
+        </div>
+
+        {/* STEP 1: BRAND & CONTACT */}
+        {recStep === 1 && (
+          <div className="space-y-4 animate-fade-in">
+            {/* Organization Selector */}
+            {renderOrgSelector('signup')}
+
+            <div className="grid grid-cols-2 gap-3.5">
+              <div className="space-y-1.5 col-span-2">
+                <Label htmlFor="recCompanyName" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Company Name *</Label>
+                <Input
+                  id="recCompanyName"
+                  value={recCompanyName}
+                  onChange={e => { setRecCompanyName(e.target.value); setError(''); }}
+                  placeholder="e.g. Stripe Inc"
+                  className="h-10 rounded-xl bg-background/30"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                <Label htmlFor="recWebsite" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Company Website *</Label>
+                <div className="relative">
+                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                  <Input
+                    id="recWebsite"
+                    value={recWebsite}
+                    onChange={e => { setRecWebsite(e.target.value); setError(''); }}
+                    placeholder="https://stripe.com"
+                    className="h-10 rounded-xl pl-9 bg-background/30"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                <Label htmlFor="recCompanyEmail" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Company Email *</Label>
+                <Input
+                  id="recCompanyEmail"
+                  type="email"
+                  value={recCompanyEmail}
+                  onChange={e => { setRecCompanyEmail(e.target.value); setError(''); }}
+                  placeholder="hiring@stripe.com"
+                  className="h-10 rounded-xl bg-background/30"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2 col-span-2 border-t border-border/40 pt-4">
+                <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Company Logo (Optional)</Label>
+                <div className="flex items-center gap-4">
+                  {recLogoUrl ? (
+                    <div className="relative group border rounded-xl overflow-hidden w-16 h-16 border-border bg-white">
+                      <img
+                        src={recLogoUrl}
+                        alt="Logo"
+                        className="w-full h-full object-contain p-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setRecLogoUrl('')}
+                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="file"
+                        id="recLogoUploadInput"
+                        accept="image/*"
+                        onChange={handleRecruiterLogoUpload}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => document.getElementById('recLogoUploadInput')?.click()}
+                        disabled={uploadingLogo}
+                        className="h-10 px-4 text-xs font-bold border-border"
+                      >
+                        {uploadingLogo ? (
+                          <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                        ) : (
+                          <Upload className="w-4 h-4 mr-1.5" />
+                        )}
+                        Upload Logo
+                      </Button>
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground">
+                    <p className="font-bold text-foreground">Upload company brand logo</p>
+                    <p className="text-[10px]">PNG or JPEG format up to 5MB.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 2: COMPANY INFO */}
+        {recStep === 2 && (
+          <div className="space-y-4 animate-fade-in">
+            <div className="grid grid-cols-2 gap-3.5">
+              <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Industry *</Label>
+                <Select
+                  value={recIndustry}
+                  onValueChange={val => { setRecIndustry(val); setError(''); }}
+                >
+                  <SelectTrigger className="h-10 rounded-xl bg-background/30 border-border">
+                    <SelectValue placeholder="Select industry" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border border-border">
+                    {['Technology', 'Finance', 'Healthcare', 'Consulting', 'Education', 'Manufacturing', 'Other'].map(t => (
+                      <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Company Size *</Label>
+                <Select
+                  value={recCompanySize}
+                  onValueChange={val => { setRecCompanySize(val); setError(''); }}
+                >
+                  <SelectTrigger className="h-10 rounded-xl bg-background/30 border-border">
+                    <SelectValue placeholder="Select size" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border border-border">
+                    {['1-10 employees', '11-50 employees', '51-200 employees', '201-500 employees', '501-1000 employees', '1000+ employees'].map(t => (
+                      <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5 col-span-2">
+                <Label htmlFor="recHeadquarters" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Headquarters Location *</Label>
+                <Input
+                  id="recHeadquarters"
+                  value={recHeadquarters}
+                  onChange={e => { setRecHeadquarters(e.target.value); setError(''); }}
+                  placeholder="e.g. Bangalore, India / San Francisco, CA"
+                  className="h-10 rounded-xl bg-background/30"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5 col-span-2">
+                <Label htmlFor="recDescription" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Company Description *</Label>
+                <textarea
+                  id="recDescription"
+                  value={recDescription}
+                  onChange={e => { setRecDescription(e.target.value); setError(''); }}
+                  placeholder="Brief company bio, goals, tech stack, or recruitment goals..."
+                  rows={4}
+                  className="w-full rounded-xl border border-border bg-background/30 px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 3: PROFESSIONAL INFO */}
+        {recStep === 3 && (
+          <div className="space-y-4 animate-fade-in">
+            <div className="grid grid-cols-2 gap-3.5">
+              <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                <Label htmlFor="recName" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Your Full Name *</Label>
+                <Input
+                  id="recName"
+                  value={recName}
+                  onChange={e => { setRecName(e.target.value); setError(''); }}
+                  placeholder="John Doe"
+                  className="h-10 rounded-xl bg-background/30"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                <Label htmlFor="recDesignation" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Designation *</Label>
+                <Input
+                  id="recDesignation"
+                  value={recDesignation}
+                  onChange={e => { setRecDesignation(e.target.value); setError(''); }}
+                  placeholder="e.g. Senior Talent Partner"
+                  className="h-10 rounded-xl bg-background/30"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5 col-span-2">
+                <Label htmlFor="recLinkedin" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">LinkedIn Profile URL *</Label>
+                <Input
+                  id="recLinkedin"
+                  value={recLinkedin}
+                  onChange={e => { setRecLinkedin(e.target.value); setError(''); }}
+                  placeholder="https://linkedin.com/in/username"
+                  className="h-10 rounded-xl bg-background/30"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5 col-span-2">
+                <Label htmlFor="email" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Personal / Login Email Address *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={e => { setEmail(e.target.value); setError(''); }}
+                  placeholder="name@gmail.com"
+                  className="h-10 rounded-xl bg-background/30"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                <Label htmlFor="password" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Password *</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); setError(''); }}
+                  placeholder="••••••••"
+                  className="h-10 rounded-xl bg-background/30"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                <Label htmlFor="recConfirmPassword" className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground">Confirm Password *</Label>
+                <Input
+                  id="recConfirmPassword"
+                  type="password"
+                  value={recConfirmPassword}
+                  onChange={e => { setRecConfirmPassword(e.target.value); setError(''); }}
+                  placeholder="••••••••"
+                  className="h-10 rounded-xl bg-background/30"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2 col-span-2 border-t border-border/40 pt-4">
+                <Label className="text-[10px] tracking-wider uppercase font-bold text-muted-foreground block">Verification Document (Optional)</Label>
+                <div className="flex items-center gap-4">
+                  {recVerificationDoc ? (
+                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl text-emerald-500 text-xs font-semibold">
+                      <FileText className="w-4 h-4" />
+                      <span>Document Uploaded</span>
+                      <button
+                        type="button"
+                        onClick={() => setRecVerificationDoc('')}
+                        className="text-red-400 hover:text-red-300 font-bold ml-1"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="file"
+                        id="recDocUploadInput"
+                        onChange={handleRecruiterDocUpload}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => document.getElementById('recDocUploadInput')?.click()}
+                        disabled={uploadingDoc}
+                        className="h-10 px-4 text-xs font-bold border-border"
+                      >
+                        {uploadingDoc ? (
+                          <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                        ) : (
+                          <Upload className="w-4 h-4 mr-1.5" />
+                        )}
+                        Upload File
+                      </Button>
+                    </div>
+                  )}
+                  <div className="text-[10px] text-muted-foreground flex-1">
+                    Upload official corporate registration doc or business card to expedite onboarding review.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Navigation Action Buttons */}
+        <div className="flex justify-between gap-3 border-t border-border/40 pt-4 mt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setError('');
+              if (recStep > 1) {
+                setRecStep(prev => prev - 1);
+              } else {
+                setIntendedRole('student');
+              }
+            }}
+            className="h-10 px-4 text-xs font-bold border-border/85"
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" />
+            Back
+          </Button>
+
+          {recStep < 3 ? (
+            <Button
+              type="button"
+              onClick={() => {
+                setError('');
+                const errs = validateRecruiterStep(recStep);
+                const errKeys = Object.keys(errs);
+                if (errKeys.length > 0) {
+                  setError(errs[errKeys[0]]);
+                  return;
+                }
+                setRecStep(prev => prev + 1);
+              }}
+              className="h-10 px-5 text-xs font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20"
+            >
+              Next
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              onClick={handleRecruiterSubmit}
+              disabled={loading || isUploading}
+              className="h-10 px-6 text-xs font-extrabold shadow-md shadow-primary/15 hover:shadow-lg hover:shadow-primary/25 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {loading ? (
+                <><Loader2 className="w-4.5 h-4.5 mr-1.5 animate-spin" /> Registering...</>
+              ) : (
+                'Submit Registration'
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background flex select-none overflow-hidden relative font-body transition-colors duration-300">
 
@@ -1920,6 +2498,8 @@ export default function AuthPage() {
             {/* Auth Form input structure */}
             {mode === 'signup' && intendedRole === 'organization' ? (
               renderOrganizationWizard()
+            ) : mode === 'signup' && intendedRole === 'recruiter' ? (
+              renderRecruiterWizard()
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 {mode === 'verify' ? (
