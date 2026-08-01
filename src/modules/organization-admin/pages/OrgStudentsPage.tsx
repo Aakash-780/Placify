@@ -216,7 +216,32 @@ export default function OrgStudentsPage() {
                           (s.college_id && s.college_id.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesBranch = filterBranch === 'All' || s.branch === filterBranch;
     const matchesYear = filterYear === 'All' || String(s.current_year) === filterYear;
-    const matchesStatus = filterStatus === 'All' || s.status === filterStatus.toLowerCase();
+    
+    let matchesStatus = true;
+    if (filterStatus !== 'All') {
+      if (activeTab === 'cohort') {
+        if (filterStatus === 'Verified') {
+          matchesStatus = s.account_status === 'Active';
+        } else if (filterStatus === 'Pending') {
+          matchesStatus = s.account_status === 'Pending';
+        } else if (filterStatus === 'Suspended') {
+          matchesStatus = s.account_status === 'Suspended';
+        } else if (filterStatus === 'Rejected') {
+          matchesStatus = s.status === 'rejected' || s.verification_status === 'Rejected';
+        }
+      } else {
+        if (filterStatus === 'Verified') {
+          matchesStatus = s.status === 'verified';
+        } else if (filterStatus === 'Pending') {
+          matchesStatus = s.status === 'pending';
+        } else if (filterStatus === 'Suspended') {
+          matchesStatus = s.status === 'suspended';
+        } else if (filterStatus === 'Rejected') {
+          matchesStatus = s.status === 'rejected';
+        }
+      }
+    }
+
     return matchesSearch && matchesBranch && matchesYear && matchesStatus;
   });
 

@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import {
-    GraduationCap, Search, ExternalLink, Mail
+    GraduationCap, Search, ExternalLink, Mail, Download, X
 } from 'lucide-react';
 
 type TabType = 'students' | 'approvals';
@@ -41,6 +41,32 @@ export default function Students() {
     }, [location.search]);
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
+
+    // Filter states
+    const [filterBranch, setFilterBranch] = useState('All');
+    const [filterGraduationYear, setFilterGraduationYear] = useState('All');
+    const [filterCgpa, setFilterCgpa] = useState('All');
+    const [filterPlacementStatus, setFilterPlacementStatus] = useState('All');
+
+    // Reset filters
+    const resetAllFilters = () => {
+        setSearch('');
+        setFilterBranch('All');
+        setFilterGraduationYear('All');
+        setFilterCgpa('All');
+        setFilterPlacementStatus('All');
+    };
+
+    // Reset filters when activeTab changes
+    useEffect(() => {
+        resetAllFilters();
+    }, [activeTab]);
+
+    const hasActiveFilters = search !== '' ||
+        filterBranch !== 'All' ||
+        filterGraduationYear !== 'All' ||
+        filterCgpa !== 'All' ||
+        filterPlacementStatus !== 'All';
 
     // Operational Lists
     const [students, setStudents] = useState<any[]>([]);
@@ -149,14 +175,92 @@ export default function Students() {
         }
     }
 
+    // Unique branches and graduation years for dropdowns
+    const uniqueBranches = Array.from(new Set(students.map(s => s.branch).filter(Boolean))).sort() as string[];
+    const uniqueGraduationYears = Array.from(new Set(students.map(s => s.graduation_year).filter(Boolean))).sort((a, b) => a - b) as number[];
+
+    // CSV Export
+    function exportToCsv() {
+        if (filteredStudents.length === 0) {
+            alert('No student records found to export.');
+            return;
+        }
+
+        const headers = [
+            'Name',
+            'Email',
+            'College ID',
+            'Branch',
+            'Current Year',
+            'Graduation Year',
+            'CGPA',
+            'Active Backlogs',
+            'Placement Status',
+            'Approved By'
+        ];
+
+        const rows = filteredStudents.map(s => [
+            s.name || '',
+            s.email || '',
+            s.college_id || '',
+            s.branch || '',
+            s.current_year ? `Year ${s.current_year}` : '',
+            s.graduation_year || '',
+            s.cgpa || '',
+            s.backlogs || '0',
+            s.placement_status === 'placed' ? 'Placed' : 'Not Placed',
+            s.approved_by_name || 'N/A'
+        ]);
+
+        const formatCell = (val: any) => {
+            const str = String(val);
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+        };
+
+        const csvContent = [
+            headers.map(formatCell).join(','),
+            ...rows.map(row => row.map(formatCell).join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `enrolled_students_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
     // Filtering Lists
-    const filteredStudents = students.filter(s =>
-        !search ||
-        s.name?.toLowerCase().includes(search.toLowerCase()) ||
-        s.email?.toLowerCase().includes(search.toLowerCase()) ||
-        s.branch?.toLowerCase().includes(search.toLowerCase()) ||
-        s.college_id?.toLowerCase().includes(search.toLowerCase())
-    );
+    const filteredStudents = students.filter(s => {
+        const matchesSearch = !search ||
+            s.name?.toLowerCase().includes(search.toLowerCase()) ||
+            s.email?.toLowerCase().includes(search.toLowerCase()) ||
+            s.branch?.toLowerCase().includes(search.toLowerCase()) ||
+            s.college_id?.toLowerCase().includes(search.toLowerCase());
+
+        const matchesBranch = filterBranch === 'All' || s.branch === filterBranch;
+        const matchesGraduationYear = filterGraduationYear === 'All' || String(s.graduation_year) === filterGraduationYear;
+
+        let matchesCgpa = true;
+        if (filterCgpa !== 'All') {
+            const cgpaVal = Number(s.cgpa) || 0;
+            if (filterCgpa === '9+') matchesCgpa = cgpaVal >= 9;
+            else if (filterCgpa === '8+') matchesCgpa = cgpaVal >= 8;
+            else if (filterCgpa === '7+') matchesCgpa = cgpaVal >= 7;
+            else if (filterCgpa === '6+') matchesCgpa = cgpaVal >= 6;
+            else if (filterCgpa === '<6') matchesCgpa = cgpaVal < 6;
+        }
+
+        const matchesPlacement = filterPlacementStatus === 'All' || s.placement_status === filterPlacementStatus;
+
+        return matchesSearch && matchesBranch && matchesGraduationYear && matchesCgpa && matchesPlacement;
+    });
 
     const filteredPending = pendingStudents.filter(u =>
         !search ||
@@ -200,11 +304,91 @@ export default function Students() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                     placeholder={`Search by name, email or branch...`}
-                    className="pl-10 h-11 rounded-xl bg-background/50 border-border"
+                    className="pl-10 pr-10 h-11 rounded-xl bg-background/50 border-border"
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                 />
+                {search && (
+                    <button
+                        onClick={() => setSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
+                        type="button"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                )}
             </div>
+
+            {activeTab === 'students' && (
+                <div className="flex flex-col md:flex-row md:items-center gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 flex-1 gap-3">
+                        <select
+                            value={filterBranch}
+                            onChange={e => setFilterBranch(e.target.value)}
+                            className="h-11 px-3 bg-background/50 border border-border rounded-xl text-xs sm:text-sm text-foreground/80 focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                        >
+                            <option value="All" className="bg-card">All Branches</option>
+                            {uniqueBranches.map(b => (
+                                <option key={b} value={b} className="bg-card">{b}</option>
+                            ))}
+                        </select>
+
+                        <select
+                            value={filterGraduationYear}
+                            onChange={e => setFilterGraduationYear(e.target.value)}
+                            className="h-11 px-3 bg-background/50 border border-border rounded-xl text-xs sm:text-sm text-foreground/80 focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                        >
+                            <option value="All" className="bg-card">All Graduation Years</option>
+                            {uniqueGraduationYears.map(y => (
+                                <option key={y} value={String(y)} className="bg-card">{y}</option>
+                            ))}
+                        </select>
+
+                        <select
+                            value={filterCgpa}
+                            onChange={e => setFilterCgpa(e.target.value)}
+                            className="h-11 px-3 bg-background/50 border border-border rounded-xl text-xs sm:text-sm text-foreground/80 focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                        >
+                            <option value="All" className="bg-card">All CGPAs</option>
+                            <option value="9+" className="bg-card">9.0+ CGPA</option>
+                            <option value="8+" className="bg-card">8.0+ CGPA</option>
+                            <option value="7+" className="bg-card">7.0+ CGPA</option>
+                            <option value="6+" className="bg-card">6.0+ CGPA</option>
+                            <option value="<6" className="bg-card">&lt; 6.0 CGPA</option>
+                        </select>
+
+                        <select
+                            value={filterPlacementStatus}
+                            onChange={e => setFilterPlacementStatus(e.target.value)}
+                            className="h-11 px-3 bg-background/50 border border-border rounded-xl text-xs sm:text-sm text-foreground/80 focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                        >
+                            <option value="All" className="bg-card">All Placements</option>
+                            <option value="placed" className="bg-card">Placed</option>
+                            <option value="not_placed" className="bg-card">Not Placed</option>
+                        </select>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end md:self-auto">
+                        {hasActiveFilters && (
+                            <Button
+                                onClick={resetAllFilters}
+                                variant="ghost"
+                                className="h-11 rounded-xl text-xs sm:text-sm font-semibold text-muted-foreground hover:text-foreground transition-all"
+                            >
+                                Clear Filters
+                            </Button>
+                        )}
+                        <Button
+                            onClick={exportToCsv}
+                            variant="outline"
+                            className="h-11 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 border-primary/20 hover:bg-primary/5 hover:text-primary transition-all font-semibold"
+                        >
+                            <Download className="w-4 h-4" />
+                            Export CSV
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             {loading ? (
                 <div className="space-y-3">{[1, 2, 3].map(i => <Card key={i} className="h-20 animate-pulse bg-muted/30" />)}</div>

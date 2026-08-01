@@ -1123,10 +1123,14 @@ export default function App() {
         showToast('User account permanently deleted.');
         setSelectedUmUser(null);
       } else {
-        const { error } = await insforge.database.from(table).update({ [statusField]: newStatus }).eq('id', selectedUmUser.id);
+        const updatePayload: any = { [statusField]: newStatus };
+        if (selectedUmUser._type === 'recruiter') {
+          updatePayload.verification_status = newStatus === 'Active' ? 'Verified' : 'Suspended';
+        }
+        const { error } = await insforge.database.from(table).update(updatePayload).eq('id', selectedUmUser.id);
         if (error) throw error;
         await writeAuditLog(`Changed ${selectedUmUser._type} status to ${newStatus}: ${selectedUmUser.email}`, selectedUmUser.name);
-        setSelectedUmUser({ ...selectedUmUser, [statusField]: newStatus });
+        setSelectedUmUser({ ...selectedUmUser, ...updatePayload });
         showToast(`User account ${newStatus === 'Active' ? 'activated' : 'suspended'}.`);
       }
       // Reload relevant data

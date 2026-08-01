@@ -11,6 +11,8 @@ lerna-debug.log*
 node_modules/
 dist/
 dist-ssr/
+control-center/node_modules/
+control-center/dist/
 
 # Python
 __pycache__/

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
     Bell, Search, Trash2, CheckCircle2, XCircle, AlertTriangle, Info,
     Briefcase, Clock, CheckCheck, Loader2, ArrowLeft, ChevronLeft, ChevronRight
@@ -30,6 +31,10 @@ export default function Notifications() {
     const [page, setPage] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const limit = 10;
+
+    // Delete confirmation states
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const [notificationToDelete, setNotificationToDelete] = useState<string | null>(null);
 
     const fetchNotifications = async () => {
         if (!roleData?.id) return;
@@ -364,7 +369,10 @@ export default function Notifications() {
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            onClick={() => deleteNotification(notif.id)}
+                                            onClick={() => {
+                                                setNotificationToDelete(notif.id);
+                                                setShowDeleteDialog(true);
+                                            }}
                                             className="h-8 w-8 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/20 rounded-lg"
                                             title="Delete Notification"
                                         >
@@ -406,6 +414,40 @@ export default function Notifications() {
                     </div>
                 </div>
             )}
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                <DialogContent className="bg-card border-border">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg font-bold">Delete Notification?</DialogTitle>
+                        <DialogDescription className="text-muted-foreground">
+                            Are you sure you want to delete this notification? This action cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="flex gap-2 justify-end mt-4">
+                        <Button 
+                            variant="outline" 
+                            onClick={() => { 
+                                setShowDeleteDialog(false); 
+                                setNotificationToDelete(null); 
+                            }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button 
+                            variant="destructive" 
+                            onClick={async () => {
+                                if (notificationToDelete) {
+                                    await deleteNotification(notificationToDelete);
+                                    setShowDeleteDialog(false);
+                                    setNotificationToDelete(null);
+                                }
+                            }}
+                        >
+                            Delete
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
