@@ -123,16 +123,16 @@ flowchart TB
 - **Authentication**
 - **Database APIs**
 - **Storage**
-- **Server functions / RPC-oriented workflows**
+- **Server Functions / RPC-oriented Workflows**
 
 ## AI / Resume Processing
 
 - **Ollama**
 - **Llama 3.2** (local/development configuration)
-- ATS scoring and heuristic fallback logic
-- PDF.js
-- Mammoth.js for DOCX processing
-- CloudConvert integration path for document conversion
+- **ATS Scoring and Heuristic Fallback Logic**
+- **PDF.js**
+- **Mammoth.js** for DOCX processing
+- **CloudConvert** integration for document conversion
 
 ## Tooling
 
@@ -140,7 +140,7 @@ flowchart TB
 - **TypeScript ESLint**
 - **PostCSS**
 - **Autoprefixer**
-- **Vite build tooling**
+- **Vite Build Tooling**
 
 ---
 
