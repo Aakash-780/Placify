@@ -53,41 +53,6 @@ None of these tools talk to each other. Every placement season, the same manual 
 ![Placify High-Level Design](docs/architecture-diagram.png)
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│                        USERS (ROLES)                          │
-│   Platform Owner · Organization Admin · Sub Admin ·           │
-│   Recruiter · Student                                         │
-└────────────────────────────┬────────────────────────────────────┘
-                             │ HTTPS (web browser)
-                             ▼
-┌───────────────────────────────────────────────────────────────┐
-│           FRONTEND WEB APPLICATION (React + TypeScript)       │
-│                                                                │
-│   Role-based dashboards · Job management · Resume builder     │
-│   & ATS · DSA/coding practice · Community forum ·              │
-│   Notifications · Analytics & reports                         │
-└────────────────────────────┬────────────────────────────────────┘
-                             │ Authenticated API requests
-                             ▼
-┌───────────────────────────────────────────────────────────────┐
-│            BACKEND LAYER (InsForge + Server Functions)        │
-│                                                                │
-│   Auth & user management  │  Business logic (APIs/RPCs)       │
-│   AI services (resume parsing, ATS scoring, DSA feedback)     │
-│   File processing (resume PDFs via CloudConvert)              │
-└──────────────┬───────────────────────────────┬─────────────────┘
-               │                               │
-               ▼                               ▼
-┌────────────────────────────┐   ┌────────────────────────────────┐
-│  DATA LAYER (PostgreSQL)   │   │       EXTERNAL SERVICES        │
-│                            │   │                                │
-│  Multi-tenant tables,      │   │  Gemini · Claude · Grok (LLMs) │
-│  scoped by organization_id │   │  CloudConvert (documents)      │
-│  Row Level Security        │   │  Email service (notifications) │
-│  File storage              │   │                                │
-└────────────────────────────┘   └────────────────────────────────┘
-```
-
 ---
 
 ## Tech Stack
