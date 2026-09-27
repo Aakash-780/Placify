@@ -97,7 +97,7 @@ flowchart TB
 
 ![Placify High-Level Design](docs/architecture-diagram.png)
 
-```
+``
 ---
 
 # Technology Stack
