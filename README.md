@@ -8,6 +8,13 @@
 [![Gemini AI](https://img.shields.io/badge/Google-Gemini_AI-4285F4?style=flat-square&logo=google&logoColor=white)](https://deepmind.google/technologies/gemini/)
 [![License](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)](LICENSE)
 
+## 🌐 Live Deployment
+
+| Portal | Link |
+|---|---|
+| 🎓 **Main Portal** | [Visit Main Portal]([https://placify.netlify.app](https://39s3r2sh.insforge.site/)) |
+| ⚙️ **Control Center** | [Visit Control Center]([https://placify-control.netlify.app](https://swjgp47e.insforge.site/ )) |
+
 ## Overview
 
 Placify is an **AI-powered, multi-tenant campus placement platform** that gives every stakeholder in campus recruitment — universities, placement cells, recruiters, and students — a single dedicated workspace instead of scattered spreadsheets, emails, and disconnected tools.
