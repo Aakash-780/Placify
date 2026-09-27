@@ -12,8 +12,8 @@
 
 | Portal | Link |
 |---|---|
-| 🎓 **Main Portal** | [Visit Main Portal]([https://placify.netlify.app](https://39s3r2sh.insforge.site/) |
-| ⚙️ **Control Center** | [Visit Control Center]([https://placify-control.netlify.app](https://swjgp47e.insforge.site/) |
+| 🎓 **Main Portal** | [Visit Main Portal]([https://placify.netlify.app](https://39s3r2sh.insforge.site/)) |
+| ⚙️ **Control Center** | [Visit Control Center]([https://placify-control.netlify.app](https://swjgp47e.insforge.site/))|
 
 ## Overview
 
